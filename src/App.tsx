@@ -7,7 +7,9 @@ import { ThemeStudio } from './components/ThemeStudio';
 import { SnapshotsPanel } from './components/SnapshotsPanel';
 import { BootloaderConfig, BootEntry } from './types';
 import { ApiService } from './services/api';
-import { Terminal, CheckCircle2, RefreshCw, Layers } from 'lucide-react';
+import { Terminal, RefreshCw, Shield, Check, HardDrive } from 'lucide-react';
+import * as Dialog from '@radix-ui/react-dialog';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('general');
@@ -48,7 +50,7 @@ export default function App() {
     setShowModal(true);
     setRegenOutput(null);
     try {
-      await ApiService.saveGrubConfig(config, "User clicked Apply Changes in GUI");
+      await ApiService.saveGrubConfig(config, "User deployed modifications via GrubEditor GUI");
       const result = await ApiService.triggerRegen();
       setRegenOutput(result.output);
       setHasPendingChanges(false);
@@ -60,8 +62,8 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex text-slate-100 bg-[var(--bg-primary)]">
-      {/* Navigation Sidebar */}
+    <div className="min-h-screen flex bg-[#03050c] text-slate-100 antialiased overflow-hidden font-sans selection:bg-indigo-500 selection:text-white">
+      {/* Navigation Dock */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -71,93 +73,113 @@ export default function App() {
         isApplying={isApplying}
       />
 
-      {/* Main Content Pane */}
-      <main className="flex-1 p-8 overflow-y-auto max-h-screen">
-        {/* Top Header Information bar */}
-        <header className="flex justify-between items-center mb-8 pb-4 border-b border-[rgba(255,255,255,0.06)]">
-          <div className="flex items-center gap-2">
-            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-300 border border-blue-500/20 flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-cyan-400" /> Root Bootloader Sandbox Active
-            </span>
-          </div>
-          <div className="flex items-center gap-3 text-xs text-slate-400 font-mono">
-            <span>Config File: <strong className="text-slate-300">{distro?.default_grub_path || "/etc/default/grub"}</strong></span>
-            <span className="text-slate-600">•</span>
-            <button onClick={reloadData} className="hover:text-cyan-400 flex items-center gap-1 transition-colors">
-              <RefreshCw className="w-3.5 h-3.5" /> Synchronize
-            </button>
-          </div>
-        </header>
+      {/* Main Workspace: Widened container (max-w-[1360px]) to perfectly utilize widescreen monitors while centering smoothly */}
+      <main className="flex-1 h-screen overflow-y-auto flex flex-col items-center px-6 sm:px-12 md:px-16 xl:px-20 py-12 sm:py-16 relative z-10 w-full">
+        <div className="w-full max-w-[1360px] flex flex-col space-y-12">
+          {/* Top Header */}
+          <header className="flex flex-wrap items-center justify-between gap-6 pb-6 border-b border-white/[0.06]">
+            <div className="flex items-center gap-3.5 text-xs font-mono text-slate-400">
+              <span className="font-extrabold text-white font-sans text-base sm:text-lg tracking-tight capitalize">{activeTab} Preferences</span>
+              <span className="text-slate-600 font-extrabold">/</span>
+              <span className="flex items-center gap-2 text-indigo-300 font-mono text-xs bg-slate-900/80 px-3.5 py-2 rounded-xl border border-white/[0.06]">
+                <HardDrive className="w-3.5 h-3.5 text-indigo-400" /> {distro?.default_grub_path || "/etc/default/grub"}
+              </span>
+              <span className="text-slate-600 font-extrabold">/</span>
+              <span className="inline-flex items-center gap-1.5 text-emerald-400 font-semibold bg-emerald-500/15 px-3.5 py-2 rounded-xl border border-emerald-500/30 text-xs">
+                <Shield className="w-3.5 h-3.5" /> Polkit Protected
+              </span>
+            </div>
 
-        {/* Tab content display */}
-        <div className="pb-16">
-          {activeTab === 'general' && (
-            <GeneralSettings config={config} onChange={handleConfigChange} bootEntries={bootEntries} />
-          )}
-          {activeTab === 'kernel' && (
-            <KernelParams config={config} onChange={handleConfigChange} />
-          )}
-          {activeTab === 'themes' && (
-            <ThemeStudio
-              currentThemePath={config["GRUB_THEME"] || ""}
-              onThemeSelect={handleThemeSelect}
-              bootEntries={bootEntries}
-              timeout={parseInt(config["GRUB_TIMEOUT"] || "5", 10)}
-            />
-          )}
-          {activeTab === 'snapshots' && (
-            <SnapshotsPanel onRestore={reloadData} />
-          )}
+            <button 
+              onClick={reloadData} 
+              className="btn-glass text-xs font-bold px-5 py-2.5"
+              title="Synchronize state from system boot partition"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-indigo-400" /> Rescan Partition
+            </button>
+          </header>
+
+          {/* Animated View Deck */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+              className="pb-36 w-full"
+            >
+              {activeTab === 'general' && (
+                <GeneralSettings config={config} onChange={handleConfigChange} bootEntries={bootEntries} />
+              )}
+              {activeTab === 'kernel' && (
+                <KernelParams config={config} onChange={handleConfigChange} />
+              )}
+              {activeTab === 'themes' && (
+                <ThemeStudio
+                  currentThemePath={config["GRUB_THEME"] || ""}
+                  onThemeSelect={handleThemeSelect}
+                  bootEntries={bootEntries}
+                  timeout={parseInt(config["GRUB_TIMEOUT"] || "5", 10)}
+                />
+              )}
+              {activeTab === 'snapshots' && (
+                <SnapshotsPanel onRestore={reloadData} />
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </main>
 
-      {/* Polkit Execution Generator Output Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
-          <div className="glass-card max-w-2xl w-full p-6 space-y-4 border border-cyan-500/40 shadow-2xl shadow-cyan-500/10">
-            <div className="flex items-center justify-between border-b border-[rgba(255,255,255,0.08)] pb-3">
-              <div className="flex items-center gap-2 text-lg font-bold text-slate-100">
-                <Terminal className="w-5 h-5 text-cyan-400 animate-pulse" />
-                <span>Polkit Helper: Bootloader Configuration Update</span>
+      {/* Radix UI Accessible Deployment Dialog Modal */}
+      <Dialog.Root open={showModal} onOpenChange={setShowModal}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md transition-opacity animate-pro" />
+          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-xl translate-x-[-50%] translate-y-[-50%] rounded-3xl border border-indigo-500/40 bg-[#070b16] p-8 shadow-2xl focus:outline-none animate-pro">
+            <Dialog.Title className="flex items-center justify-between border-b border-white/[0.07] pb-5">
+              <div className="flex items-center gap-4">
+                <div className="p-3.5 rounded-2xl bg-indigo-500/20 text-indigo-400">
+                  <Terminal className="w-6 h-6 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-xl text-white">Deploying Bootloader</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Compiling system instructions via Polkit root helper</p>
+                </div>
               </div>
               {!isApplying && (
-                <span className="status-pill emerald">
-                  <CheckCircle2 className="w-4 h-4" /> Finished Successfully
+                <span className="px-3.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold font-mono flex items-center gap-1.5 shadow-sm">
+                  <Check className="w-3.5 h-3.5 stroke-[3]" /> Synchronized
                 </span>
+              )}
+            </Dialog.Title>
+
+            <Dialog.Description className="sr-only">
+              System terminal log showing the real-time compilation output of the grub regeneration command.
+            </Dialog.Description>
+
+            <div className="my-6 bg-[#020409] p-6 rounded-2xl border border-white/[0.06] font-mono text-xs text-slate-300 max-h-80 overflow-y-auto space-y-1.5 shadow-inner">
+              {regenOutput ? (
+                <pre className="whitespace-pre-wrap leading-relaxed text-emerald-400 font-mono text-xs">{regenOutput}</pre>
+              ) : (
+                <div className="flex items-center gap-3.5 text-indigo-400 py-12 justify-center font-bold text-sm">
+                  <RefreshCw className="w-5 h-5 animate-spin text-indigo-400" />
+                  <span>Executing `{distro?.regen_command.join(' ')}`...</span>
+                </div>
               )}
             </div>
 
-            <div className="space-y-2">
-              <p className="text-xs text-slate-300">
-                {isApplying
-                  ? "Prompting for administrator authorization via OS Polkit dialog and generating grub configuration..."
-                  : "Modifications saved to /etc/default/grub and bootloader generator complete!"}
-              </p>
-              
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-900 font-mono text-xs text-emerald-400 max-h-80 overflow-y-auto space-y-1 shadow-inner">
-                {regenOutput ? (
-                  <pre className="whitespace-pre-wrap leading-relaxed">{regenOutput}</pre>
-                ) : (
-                  <div className="flex items-center gap-2 text-cyan-400 py-6 justify-center">
-                    <RefreshCw className="w-5 h-5 animate-spin" />
-                    <span>Executing `{distro?.regen_command.join(' ')}` with elevated Polkit privileges...</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-end">
               <button
                 onClick={() => setShowModal(false)}
                 disabled={isApplying}
-                className="glow-btn px-6 py-2 text-xs"
+                className="btn-luminous px-8 py-3.5 text-xs font-bold rounded-2xl"
               >
-                Close Dialog
+                Return to Workspace
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }

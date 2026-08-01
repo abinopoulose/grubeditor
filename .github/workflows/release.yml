@@ -2,8 +2,8 @@ name: Release Ubuntu Application & DEB Package
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - dev
   workflow_dispatch:
 
 jobs:

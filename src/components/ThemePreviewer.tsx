@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { ThemeMetadata, BootEntry } from '../types';
-import { Monitor, ArrowUp, ArrowDown, CornerDownLeft, Sparkles } from 'lucide-react';
+import { Monitor, Terminal } from 'lucide-react';
 
 interface ThemePreviewerProps {
   theme: ThemeMetadata | null;
@@ -9,142 +9,88 @@ interface ThemePreviewerProps {
 }
 
 export const ThemePreviewer: React.FC<ThemePreviewerProps> = ({ theme, bootEntries, timeout }) => {
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [timer, setTimer] = useState(timeout || 5);
+  if (!theme) {
+    return (
+      <div className="h-[420px] w-full rounded-3xl border border-white/[0.07] bg-[#050710]/80 flex flex-col items-center justify-center text-slate-400 p-8 text-center space-y-3 font-mono text-xs shadow-2xl">
+        <Monitor className="w-10 h-10 text-slate-600 animate-pulse" />
+        <span>Select an installed theme from the studio grid below to launch the UEFI graphical monitor simulation...</span>
+      </div>
+    );
+  }
 
-  useEffect(() => {
-    setTimer(timeout || 5);
-    const interval = setInterval(() => {
-      setTimer(t => (t > 0 ? t - 1 : 0));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [timeout, theme]);
+  const defaultEntries: BootEntry[] = [
+    { id: '0', title: 'Ubuntu 24.04.4 LTS (Monolithic Kernel 6.8.0-45)' },
+    { id: '1', title: 'Ubuntu 24.04.4 LTS (Recovery & Advanced Diagnostics)' },
+    { id: '2', title: 'Windows 11 Pro (on /dev/nvme0n1p1 via OS-Prober)' },
+    { id: '3', title: 'UEFI Firmware & NVRAM System Setup' },
+  ];
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowUp') {
-      setSelectedIndex(prev => (prev > 0 ? prev - 1 : bootEntries.length - 1));
-      setTimer(0);
-    } else if (e.key === 'ArrowDown') {
-      setSelectedIndex(prev => (prev < bootEntries.length - 1 ? prev + 1 : 0));
-      setTimer(0);
-    }
-  };
-
-  const moveUp = () => {
-    setSelectedIndex(prev => (prev > 0 ? prev - 1 : bootEntries.length - 1));
-    setTimer(0);
-  };
-
-  const moveDown = () => {
-    setSelectedIndex(prev => (prev < bootEntries.length - 1 ? prev + 1 : 0));
-    setTimer(0);
-  };
-
-  const bgStyle = theme && theme.background_image ? {
-    background: `radial-gradient(ellipse at center, rgba(13,27,42,0.85) 0%, rgba(3,7,18,0.95) 100%), linear-gradient(135deg, #0f172a 0%, #061122 50%, #030712 100%)`,
-  } : {
-    backgroundColor: '#030712',
-  };
+  const displayEntries = bootEntries.length > 0 ? bootEntries : defaultEntries;
 
   return (
-    <div className="space-y-4 select-none">
-      <div className="flex items-center justify-between px-1">
-        <span className="text-xs font-semibold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
-          <Monitor className="w-4 h-4" /> Live Boot Monitor Simulator (Interactive)
-        </span>
-        <div className="flex items-center gap-2 text-[11px] text-slate-400">
-          <span>Use buttons or click monitor + arrow keys to test menu:</span>
-          <button onClick={moveUp} className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 flex items-center gap-1">
-            <ArrowUp className="w-3 h-3" /> Up
-          </button>
-          <button onClick={moveDown} className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 flex items-center gap-1">
-            <ArrowDown className="w-3 h-3" /> Down
-          </button>
+    <div className="rounded-3xl border border-indigo-500/40 bg-gradient-to-b from-[#0b1022] to-[#04060c] p-6 sm:p-8 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85)] relative overflow-hidden text-slate-100 ring-1 ring-white/[0.1]">
+      {/* Monitor frame header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.08] pb-4 mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-3.5 h-3.5 rounded-full bg-indigo-500 animate-ping" />
+          <span className="font-extrabold font-mono text-xs text-white uppercase tracking-wider flex items-center gap-2">
+            <Monitor className="w-4 h-4 text-indigo-400" /> LIVE UEFI SIMULATOR: <strong className="text-indigo-300">{theme.name}</strong>
+          </span>
         </div>
+        <span className="text-xs font-mono text-slate-400 bg-black/60 px-3 py-1 rounded-lg border border-white/[0.08]">
+          Resolution: <strong>1920x1080x32 (GFXTERM)</strong>
+        </span>
       </div>
 
-      {/* Outer Monitor Frame */}
-      <div 
-        tabIndex={0}
-        onKeyDown={handleKeyDown}
-        className="rounded-2xl border-4 border-slate-800 p-2 bg-slate-950 shadow-2xl shadow-black/80 outline-none focus:border-cyan-500/50 transition-all relative overflow-hidden"
-      >
-        {/* UEFI Header Sim */}
-        <div className="bg-black text-[10px] text-slate-500 px-3 py-1 flex justify-between items-center font-mono border-b border-slate-900">
-          <span>UEFI Boot Manager v2.4 (GfxTerm Engine Active)</span>
-          <span>Resolution: 1920x1080x32 • Font: {theme?.has_pf2_fonts ? "PF2 Vector" : "VGA Standard"}</span>
-        </div>
+      {/* Simulated Display Screen */}
+      <div className="relative rounded-2xl bg-[#020308] border border-white/[0.1] h-[360px] sm:h-[400px] flex flex-col justify-between p-8 sm:p-12 shadow-inner overflow-hidden">
+        {/* Subtle background glow mimicking distributor branding */}
+        <div className="absolute -top-32 -right-32 w-80 h-80 bg-indigo-600/15 rounded-full filter blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-32 -left-32 w-80 h-80 bg-blue-600/10 rounded-full filter blur-3xl pointer-events-none" />
 
-        {/* Simulated GRUB Canvas screen */}
-        <div 
-          style={bgStyle}
-          className="min-h-[440px] p-8 flex flex-col justify-between relative overflow-hidden border border-slate-900 rounded-lg"
-        >
-          {/* Cyberpunk grid overlay simulation */}
-          <div className="absolute inset-0 opacity-10 pointer-events-none bg-[radial-gradient(#3b82f6_1px,transparent_1px)] [background-size:16px_16px]" />
-
-          {/* Theme Title Header */}
-          <div className="text-center z-10 my-4">
-            <h1 className="text-3xl font-extrabold tracking-wide font-mono" style={{ color: theme ? theme.selected_item_color : '#ffffff' }}>
-              {theme?.title_text || "GNU GRUB version 2.12"}
-            </h1>
-            <p className="text-xs text-slate-500 mt-1 font-mono">
-              Use the ↑ and ↓ keys to select which entry is highlighted.
-            </p>
+        <div className="space-y-6 relative z-10">
+          <div className="text-center space-y-1 pb-4 border-b border-white/[0.05]">
+            <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-widest uppercase font-mono drop-shadow-md">
+              GNU GRUB version 2.06-2ubuntu14.4
+            </h3>
+            <span className="text-[11px] font-mono text-indigo-300 font-semibold block">
+              Theme Profile: {theme.path}/theme.txt
+            </span>
           </div>
 
-          {/* Menu Selection Box */}
-          <div className="z-10 max-w-2xl mx-auto w-full space-y-2 my-6 bg-slate-950/60 p-5 rounded-xl border border-slate-800/80 backdrop-blur-md">
-            {bootEntries.map((entry, idx) => {
-              const isSelected = idx === selectedIndex;
+          {/* Menu list items */}
+          <div className="space-y-3 max-w-3xl mx-auto font-mono text-xs sm:text-sm">
+            {displayEntries.slice(0, 4).map((entry, idx) => {
+              const isSelected = idx === 0;
               return (
                 <div
                   key={idx}
-                  onClick={() => { setSelectedIndex(idx); setTimer(0); }}
-                  style={{
-                    backgroundColor: isSelected ? 'rgba(6, 182, 212, 0.2)' : 'transparent',
-                    borderColor: isSelected ? theme?.selected_item_color || '#06b6d4' : 'transparent',
-                    color: isSelected ? theme?.selected_item_color || '#ffffff' : theme?.item_color || '#94a3b8'
-                  }}
-                  className={`px-4 py-3 rounded-lg font-mono text-sm cursor-pointer transition-all border flex items-center justify-between ${
-                    isSelected ? 'shadow-lg shadow-cyan-500/10 font-bold' : 'hover:bg-slate-900/40'
+                  className={`px-6 py-3.5 rounded-xl border flex items-center justify-between transition-all ${
+                    isSelected
+                      ? 'bg-indigo-600 text-white font-extrabold border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.6)] scale-[1.01]'
+                      : 'bg-white/[0.02] border-transparent text-slate-300 opacity-80'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-cyan-400 animate-pulse' : 'bg-slate-700'}`} />
-                    <span>{entry.title}</span>
-                  </div>
-                  {isSelected && <CornerDownLeft className="w-4 h-4 opacity-75 shrink-0" />}
+                  <span className="truncate"> * {entry.title} </span>
+                  {isSelected && <span className="text-[10px] uppercase tracking-wider bg-black/40 px-2.5 py-0.5 rounded text-indigo-200">AUTO-BOOT</span>}
                 </div>
               );
             })}
           </div>
-
-          {/* Footer & Countdown Progress */}
-          <div className="z-10 text-center space-y-3 pt-4 border-t border-slate-900/80">
-            <p className="text-xs font-mono text-slate-400">
-              Press enter to boot the selected OS, 'e' to edit the commands before booting, or 'c' for a command-line.
-            </p>
-            {timer > 0 ? (
-              <div className="w-64 mx-auto space-y-1">
-                <div className="flex justify-between text-[11px] font-mono text-cyan-400">
-                  <span>Auto-booting in {timer}s...</span>
-                  <span>{Math.round((timer / (timeout || 5)) * 100)}%</span>
-                </div>
-                <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-1000"
-                    style={{ width: `${(timer / (timeout || 5)) * 100}%` }}
-                  />
-                </div>
-              </div>
-            ) : (
-              <span className="text-xs font-mono text-amber-400/90 flex items-center justify-center gap-1">
-                <Sparkles className="w-3.5 h-3.5" /> Countdown paused by user intervention
-              </span>
-            )}
-          </div>
         </div>
+
+        {/* Footer screen help instructions */}
+        <div className="text-center font-mono text-[11px] text-slate-400 relative z-10 pt-4 border-t border-white/[0.05] flex flex-wrap justify-between items-center gap-4">
+          <span>Use the <kbd className="px-1.5 py-0.5 bg-slate-900 rounded border border-white/[0.1] text-indigo-300 font-bold">↑</kbd> and <kbd className="px-1.5 py-0.5 bg-slate-900 rounded border border-white/[0.1] text-indigo-300 font-bold">↓</kbd> keys to select which entry is highlighted.</span>
+          <span className="text-indigo-300 font-extrabold bg-indigo-950/80 px-3 py-1 rounded-md border border-indigo-500/30">
+            The highlighted entry will execute automatically in {timeout}s.
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between text-xs text-slate-500 px-2 font-mono">
+        <span className="flex items-center gap-2"><Terminal className="w-3.5 h-3.5 text-indigo-400" /> PF2 bitmap fonts will render natively without pixelation during hardware cold-boot.</span>
+        <span>Status: <strong>{theme.is_valid ? 'Verified' : 'Missing Assets'}</strong></span>
       </div>
     </div>
   );

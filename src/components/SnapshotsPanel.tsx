@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Snapshot } from '../types';
 import { ApiService } from '../services/api';
-import { History, RotateCcw, ShieldCheck, Clock, CheckCircle } from 'lucide-react';
+import { RotateCcw, ShieldCheck, Clock, CheckCircle2, FileText, Folder } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 interface SnapshotsPanelProps {
   onRestore: () => void;
@@ -22,99 +23,115 @@ export const SnapshotsPanel: React.FC<SnapshotsPanelProps> = ({ onRestore }) => 
 
   const handleRestore = async (snap: Snapshot) => {
     setRestoringId(snap.timestamp);
-    await new Promise(res => setTimeout(res, 800)); // Emulate file restoration time
+    await new Promise(res => setTimeout(res, 800));
     await ApiService.restoreSnapshot(snap.timestamp);
     setRestoringId(null);
-    setNotification(`Successfully reverted bootloader configuration to state from ${snap.date_string}`);
+    setNotification(`Successfully restored system bootloader configuration from snapshot created on ${snap.date_string}`);
     loadSnaps();
     onRestore();
-    setTimeout(() => setNotification(null), 5000);
+    setTimeout(() => setNotification(null), 6000);
   };
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-4xl">
-      <div>
-        <h2 className="text-2xl font-bold bg-gradient-to-r from-white via-blue-200 to-slate-300 bg-clip-text text-transparent">
-          Atomic Rollback & Recovery Snapshots
+    <div className="space-y-16 w-full">
+      <div className="space-y-3">
+        <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+          Recovery Shield & Snapshots
         </h2>
-        <p className="text-sm text-slate-400 mt-1">
-          GrubEditor automatically archives timestamped snapshots of <code>/etc/default/grub</code> and compiled boot configurations prior to every modification.
+        <p className="text-base text-slate-400 max-w-3xl leading-relaxed">
+          GrubEditor automatically records timestamped configuration archives prior to every system deployment for zero-risk recovery and absolute rollback assurance.
         </p>
       </div>
 
       {notification && (
-        <div className="p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 flex items-center gap-3 animate-fade-in shadow-lg">
-          <CheckCircle className="w-6 h-6 text-emerald-400 shrink-0" />
-          <span>{notification}</span>
-        </div>
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="selection-card active !cursor-default" style={{ borderColor: 'rgba(16, 185, 129, 0.5)', background: 'rgba(16, 185, 129, 0.1)' }}
+        >
+          <div className="flex items-center gap-4">
+            <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
+            <span className="text-emerald-300 text-sm font-extrabold">{notification}</span>
+          </div>
+        </motion.div>
       )}
 
-      <div className="glass-card p-6 space-y-4 border-l-4 border-l-emerald-500">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-slate-100 flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-emerald-400" /> Automatic Safety Shield
-          </h3>
-          <span className="text-xs text-slate-500 font-mono">Storage: /var/lib/grub-editor/backups/</span>
+      {/* Assurance Vault Box */}
+      <div className="info-banner">
+        <div className="ui-card-header flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="ui-card-title">
+            <ShieldCheck className="w-6 h-6 text-emerald-400" /> Pre-Modification Rollback Assurance
+          </div>
+          <span className="code-tag flex items-center gap-2 shrink-0">
+            <Folder className="w-4 h-4 text-emerald-400" /> Vault Path: <strong className="text-emerald-300">/var/lib/grub-editor/backups/</strong>
+          </span>
         </div>
-        <p className="text-xs text-slate-400 leading-relaxed">
-          If an incompatible kernel flag or graphical display mode causes visual flicker during boot, you can effortlessly restore an earlier snapshot here in one click, or invoke our emergency CLI tool directly from terminal recovery TTY: <code className="text-cyan-300">sudo grub-editor-helper restore-snapshot &lt;TIMESTAMP&gt;</code>.
-        </p>
+        <div className="ui-card-content">
+          <p className="ui-card-description text-sm">
+            If a custom kernel flag or display resolution ever impedes normal workstation booting, you can revert instantaneously with a single click below or execute our terminal helper from a recovery TTY session: <code className="code-tag inline-block mt-2">sudo grub-editor-helper restore-snapshot &lt;TIMESTAMP&gt;</code>
+          </p>
+        </div>
       </div>
 
-      <div className="space-y-4 pt-2">
-        <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
-          <History className="w-5 h-5 text-blue-400" /> Snapshot Log History ({snapshots.length})
-        </h3>
+      {/* Recorded Backups Deck */}
+      <section className="space-y-6 section-divider">
+        <div className="space-y-1">
+          <h3 className="text-xl font-bold text-white flex items-center gap-3">
+            <FileText className="w-5 h-5 text-indigo-400" /> Recorded Configuration Vault ({snapshots.length})
+          </h3>
+          <p className="text-sm text-slate-400">Select any archived configuration point to immediately restore system files to their exact historical state.</p>
+        </div>
 
-        {snapshots.length === 0 ? (
-          <div className="text-slate-500 p-8 text-center bg-slate-900/40 rounded-xl border border-slate-800">
-            No snapshots recorded yet. Make a modification in General Settings or Theme Studio to generate an automatic safety backup!
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {snapshots.map((snap, index) => {
+        <div className="flex flex-col gap-4 pt-2">
+          {snapshots.length === 0 ? (
+            <div className="selection-card justify-center p-20 !cursor-default">
+              <span className="text-slate-400 font-mono text-sm text-center">No safety snapshots recorded yet. Deploy a modification in General Settings to generate your first automatic backup archive!</span>
+            </div>
+          ) : (
+            snapshots.map((snap, index) => {
               const isLatest = index === 0;
               const isRestoring = restoringId === snap.timestamp;
 
               return (
-                <div
+                <motion.div
                   key={snap.timestamp}
-                  className="glass-card p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all hover:border-blue-500/40"
+                  whileHover={{ scale: 1.008 }}
+                  whileTap={{ scale: 0.995 }}
+                  className="snapshot-card flex-col sm:flex-row"
                 >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-base text-slate-200">{snap.description}</span>
+                  <div className="space-y-3 min-w-0 flex-1">
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <span className="font-extrabold text-xl text-white">{snap.description}</span>
                       {isLatest && (
-                        <span className="status-pill emerald text-[10px]">
-                          Current State
-                        </span>
+                        <span className="badge emerald">Active Live Snapshot</span>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-slate-400 font-mono">
-                      <span className="flex items-center gap-1 text-slate-400">
-                        <Clock className="w-3.5 h-3.5 text-blue-400" /> {snap.date_string}
+                    <div className="flex flex-wrap items-center gap-6 text-xs text-slate-400 font-mono">
+                      <span className="flex items-center gap-2 text-slate-300 font-semibold">
+                        <Clock className="w-4 h-4 text-indigo-400" /> {snap.date_string}
                       </span>
-                      <span>ID: #{snap.timestamp}</span>
+                      <span>Vault ID: <strong className="text-indigo-300 font-bold">#{snap.timestamp}</strong></span>
                     </div>
-                    <div className="text-[11px] font-mono text-slate-400 truncate max-w-lg">
-                      Backup: {snap.default_grub_backup}
+                    <div className="text-xs font-mono text-slate-500 truncate max-w-2xl">
+                      Archive File: <span className="text-slate-300 font-semibold">{snap.default_grub_backup}</span>
                     </div>
                   </div>
 
                   <button
+                    type="button"
                     onClick={() => handleRestore(snap)}
                     disabled={isRestoring}
-                    className="glow-btn px-4 py-2 text-xs md:w-auto w-full justify-center shrink-0 border border-cyan-500/30"
+                    className="btn-luminous shrink-0 px-8 py-4 text-xs font-bold"
                   >
-                    <RotateCcw className={`w-3.5 h-3.5 ${isRestoring ? 'animate-spin' : ''}`} />
-                    <span>{isRestoring ? 'Restoring Files...' : 'Revert to This Snapshot'}</span>
+                    <RotateCcw className={`w-4 h-4 ${isRestoring ? 'animate-spin' : ''}`} />
+                    <span>{isRestoring ? 'Restoring System...' : 'Revert to Snapshot'}</span>
                   </button>
-                </div>
+                </motion.div>
               );
-            })}
-          </div>
-        )}
-      </div>
+            })
+          )}
+        </div>
+      </section>
     </div>
   );
 };

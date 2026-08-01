@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ThemeMetadata, BootEntry } from '../types';
 import { ThemePreviewer } from './ThemePreviewer';
-import { CheckCircle, AlertTriangle, XCircle, FileCheck, Sparkles } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, XCircle, FileCheck, Palette, Folder } from 'lucide-react';
 import { ApiService } from '../services/api';
+import { motion } from 'framer-motion';
 
 interface ThemeStudioProps {
   currentThemePath: string;
@@ -25,7 +26,6 @@ export const ThemeStudio: React.FC<ThemeStudioProps> = ({
     ApiService.scanThemes().then(data => {
       setThemes(data);
       if (data.length > 0) {
-        // Find matching active theme or default to first valid one
         const active = data.find(t => currentThemePath.includes(t.name)) || data[0];
         setSelectedTheme(active);
       }
@@ -40,124 +40,128 @@ export const ThemeStudio: React.FC<ThemeStudioProps> = ({
   };
 
   return (
-    <div className="space-y-8 animate-fade-in max-w-5xl">
-      <div>
-        <h2 className="text-2xl font-bold bg-gradient-to-r from-white via-cyan-200 to-slate-300 bg-clip-text text-transparent">
-          GRUB Theme Studio & Live Verification
+    <div className="space-y-16 w-full">
+      <div className="space-y-3">
+        <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+          Theme Studio & Verification
         </h2>
-        <p className="text-sm text-slate-400 mt-1">
-          Inspect theme assets, verify resolution compliance and font permissions (.pf2), and simulate your boot display before rebooting.
+        <p className="text-base text-slate-400 max-w-3xl leading-relaxed">
+          Preview interactive bootloader graphical themes before rebooting your hardware. Simultaneously audits bitmap font availability (.pf2) and filesystem readability.
         </p>
       </div>
 
-      {/* Live Simulation Screen */}
+      {/* Live Simulation Monitor */}
       <ThemePreviewer theme={selectedTheme} bootEntries={bootEntries} timeout={timeout} />
 
-      {/* Theme Selection Cards & Health Diagnostics */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-cyan-400" /> Installed Boot Themes
-          </h3>
-          <span className="text-xs font-mono text-slate-500">
-            Scanning folder: /boot/grub/themes/
+      {/* Discovered Themes Grid */}
+      <section className="space-y-8 section-divider">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h3 className="text-xl font-bold text-white flex items-center gap-3">
+              <Palette className="w-5 h-5 text-indigo-400" /> Discovered Boot Themes ({themes.length})
+            </h3>
+            <p className="text-sm text-slate-400">Click any card to inspect layout on the simulator above, or deploy directly to storage.</p>
+          </div>
+          <span className="code-tag flex items-center gap-2">
+            <Folder className="w-4 h-4 text-indigo-400" /> Directory: <strong className="text-indigo-300">/boot/grub/themes/</strong>
           </span>
         </div>
 
         {isLoading ? (
-          <div className="text-slate-400 p-8 text-center animate-pulse">Scanning filesystem for installed theme assets...</div>
+          <div className="selection-card justify-center p-20">
+            <span className="text-slate-400 font-mono text-sm">Scanning root storage drives for installed GRUB themes...</span>
+          </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {themes.map((t) => {
               const isSelected = selectedTheme?.name === t.name;
               const isActiveInGrub = currentThemePath.includes(t.name);
 
               return (
-                <div
+                <motion.div
                   key={t.name}
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.995 }}
                   onClick={() => setSelectedTheme(t)}
-                  className={`glass-card p-5 cursor-pointer transition-all flex flex-col justify-between border ${
-                    isSelected
-                      ? 'border-cyan-400 bg-gradient-to-b from-[rgba(6,182,212,0.15)] to-slate-900 shadow-xl shadow-cyan-500/10 scale-[1.02]'
-                      : 'border-slate-800 opacity-85 hover:opacity-100'
-                  }`}
+                  className={`selection-card !flex-col !items-stretch !p-0 overflow-hidden ${isSelected ? 'active' : ''}`}
                 >
-                  <div>
-                    <div className="flex justify-between items-start gap-2 mb-3">
-                      <h4 className="font-bold text-base text-white truncate">{t.name}</h4>
-                      {isActiveInGrub && (
-                        <span className="status-pill emerald shrink-0 text-[10px]">
-                          Active Theme
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Health Audit Checklist (GrubDeck logic!) */}
-                    <div className="space-y-2 mb-4 p-3 rounded-lg bg-slate-950/60 border border-slate-900 text-xs">
-                      <div className="font-semibold text-slate-300 flex items-center gap-1.5 pb-1 border-b border-slate-900">
-                        <FileCheck className="w-3.5 h-3.5 text-blue-400" /> Verification Checklist:
-                      </div>
-                      
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-slate-400">Config (theme.txt):</span>
-                        <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                          <CheckCircle className="w-3.5 h-3.5 inline" /> Valid
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-slate-400">Bitmap Fonts (.pf2):</span>
-                        {t.has_pf2_fonts ? (
-                          <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                            <CheckCircle className="w-3.5 h-3.5 inline" /> Present
-                          </span>
-                        ) : (
-                          <span className="text-amber-400 font-semibold flex items-center gap-1" title="May fallback to text mode during boot">
-                            <AlertTriangle className="w-3.5 h-3.5 inline" /> Missing Font!
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-slate-400">Read Permissions:</span>
-                        {t.is_valid ? (
-                          <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                            <CheckCircle className="w-3.5 h-3.5 inline" /> 0755 Safe
-                          </span>
-                        ) : (
-                          <span className="text-red-400 font-semibold flex items-center gap-1">
-                            <XCircle className="w-3.5 h-3.5 inline" /> Broken
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Validation Errors Display */}
-                    {!t.is_valid && t.validation_errors.length > 0 && (
-                      <div className="mb-4 p-3 rounded-lg bg-red-950/40 border border-red-500/30 text-red-300 text-xs space-y-1">
-                        {t.validation_errors.map((err, idx) => (
-                          <div key={idx} className="flex items-start gap-1.5 text-[11px]">
-                            <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
-                            <span>{err}</span>
-                          </div>
-                        ))}
-                      </div>
+                  {/* Theme name header */}
+                  <div className="flex justify-between items-center gap-4 p-7 pb-5">
+                    <h4 className="font-extrabold text-2xl text-white truncate">{t.name}</h4>
+                    {isActiveInGrub && (
+                      <span className="badge emerald shrink-0">Active Boot Theme</span>
                     )}
                   </div>
 
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleApply(t); }}
-                    disabled={!t.is_valid || isActiveInGrub}
-                    className="glow-btn w-full justify-center py-2 text-xs mt-2"
-                  >
-                    {isActiveInGrub ? "Currently Configured in GRUB" : t.is_valid ? "Apply & Configure Theme" : "Cannot Apply (Invalid Assets)"}
-                  </button>
-                </div>
+                  {/* Diagnostic Audit Box */}
+                  <div className="mx-7 mb-7">
+                    <div className="diagnostic-box">
+                      <div className="diagnostic-header">
+                        <FileCheck className="w-4 h-4 text-indigo-400" /> Asset Health Diagnostics
+                      </div>
+                      
+                      <div className="diagnostic-row">
+                        <span className="text-slate-400 font-medium">Theme Descriptor:</span>
+                        {t.validation_errors.some(e => e.toLowerCase().includes('theme.txt')) ? (
+                          <span className="text-red-400 font-extrabold flex items-center gap-1.5">
+                            <XCircle className="w-4 h-4" /> Missing theme.txt
+                          </span>
+                        ) : (
+                          <span className="text-emerald-400 font-extrabold flex items-center gap-1.5">
+                            <CheckCircle2 className="w-4 h-4" /> Valid theme.txt
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="diagnostic-row">
+                        <span className="text-slate-400 font-medium">PF2 Bitmap Fonts:</span>
+                        {t.has_pf2_fonts ? (
+                          <span className="text-emerald-400 font-extrabold flex items-center gap-1.5">
+                            <CheckCircle2 className="w-4 h-4" /> Found & Ready
+                          </span>
+                        ) : (
+                          <span className="text-amber-400 font-extrabold flex items-center gap-1.5">
+                            <AlertTriangle className="w-4 h-4" /> Missing (.pf2)
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="diagnostic-row">
+                        <span className="text-slate-400 font-medium">Read Permissions:</span>
+                        {t.is_valid ? (
+                          <span className="text-emerald-400 font-extrabold flex items-center gap-1.5">
+                            <CheckCircle2 className="w-4 h-4" /> 0755 Readable
+                          </span>
+                        ) : (
+                          <span className="text-red-400 font-extrabold flex items-center gap-1.5">
+                            <XCircle className="w-4 h-4" /> Restricted Access
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action button */}
+                  <div className="px-7 pb-7">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleApply(t); }}
+                      disabled={!t.is_valid || isActiveInGrub}
+                      className={`w-full py-4 text-xs font-extrabold rounded-2xl transition-all ${
+                        isActiveInGrub 
+                          ? 'bg-slate-900/90 text-slate-500 border border-white/10 cursor-default' 
+                          : t.is_valid ? 'btn-luminous' : 'bg-slate-950 text-slate-600 cursor-not-allowed border border-white/5'
+                      }`}
+                    >
+                      {isActiveInGrub ? "Configured in System Bootloader" : t.is_valid ? "Apply as Active Theme" : "Cannot Deploy (Incomplete Assets)"}
+                    </button>
+                  </div>
+                </motion.div>
               );
             })}
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 };

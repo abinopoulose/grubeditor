@@ -1,6 +1,7 @@
 import React from 'react';
-import { Settings, Cpu, Palette, History, ShieldAlert, Terminal } from 'lucide-react';
 import { BootloaderConfig } from '../types';
+import { Settings, Cpu, LayoutTemplate, RotateCcw, Save, Terminal, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 interface SidebarProps {
   activeTab: string;
@@ -17,88 +18,108 @@ export const Sidebar: React.FC<SidebarProps> = ({
   distro,
   hasPendingChanges,
   onApplyChanges,
-  isApplying
+  isApplying,
 }) => {
-  const tabs = [
-    { id: 'general', label: 'General Settings', icon: Settings },
-    { id: 'kernel', label: 'Kernel Parameters', icon: Cpu },
-    { id: 'themes', label: 'Theme Studio & Preview', icon: Palette },
-    { id: 'snapshots', label: 'Recovery & Snapshots', icon: History },
+  const navItems = [
+    { id: 'general', label: 'General & Timers', icon: Settings },
+    { id: 'kernel', label: 'Kernel Tuning', icon: Cpu },
+    { id: 'themes', label: 'Theme Studio', icon: LayoutTemplate },
+    { id: 'snapshots', label: 'Recovery Shield', icon: RotateCcw },
   ];
 
   return (
-    <div className="w-72 border-r border-[var(--border-glass)] bg-[rgba(10,14,23,0.85)] backdrop-blur-2xl flex flex-col justify-between p-5 select-none shrink-0 h-screen sticky top-0">
-      <div>
-        {/* App Title Header */}
-        <div className="flex items-center gap-3 mb-8 px-2">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-cyan-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-            <Terminal className="w-6 h-6 text-white animate-pulse" />
+    <aside className="w-[280px] sm:w-[300px] pro-sidebar h-screen flex flex-col justify-between p-7 pb-8 shrink-0 select-none relative z-20 shadow-[20px_0_50px_rgba(0,0,0,0.75)]">
+      <div className="space-y-12">
+        {/* App Branding */}
+        <div className="flex items-center gap-4 px-1 pt-2">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-500 via-indigo-600 to-blue-500 p-[1px] shadow-lg shadow-indigo-500/25 flex items-center justify-center shrink-0">
+            <div className="w-full h-full bg-[#050712] rounded-[15px] flex items-center justify-center">
+              <Terminal className="w-6 h-6 text-indigo-400 filter drop-shadow-[0_0_10px_rgba(99,102,241,0.8)]" />
+            </div>
           </div>
           <div>
-            <h1 className="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-              GrubEditor
-            </h1>
-            <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" /> Wayland & Polkit Safe
+            <div className="flex items-center gap-2">
+              <h1 className="font-extrabold text-2xl text-white tracking-tight">
+                Grub<span className="text-indigo-400">Editor</span>
+              </h1>
+              <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/35 text-[9px] font-mono font-extrabold">PRO</span>
+            </div>
+            <span className="text-xs text-slate-400 font-semibold block mt-0.5">
+              Linux Desktop Boot Utility
             </span>
           </div>
         </div>
 
-        {/* Host OS & Distro Badge */}
-        {distro && (
-          <div className="mb-6 p-3 rounded-xl bg-gradient-to-b from-[rgba(59,130,246,0.1)] to-[rgba(6,182,212,0.05)] border border-[rgba(59,130,246,0.25)] text-xs">
-            <div className="font-semibold text-cyan-300 flex items-center justify-between">
-              <span>{distro.distro_name}</span>
-              <span className="px-2 py-0.5 rounded text-[10px] uppercase bg-blue-500/20 text-blue-300 font-mono">
-                {distro.family}
-              </span>
-            </div>
-            <div className="text-slate-400 mt-2 flex items-center gap-1 font-mono text-[11px] truncate">
-              <span className="text-slate-500">$</span> {distro.regen_command.join(' ')}
-            </div>
+        {/* Navigation Dock */}
+        <nav className="space-y-2">
+          <div className="px-3 pb-2.5 text-[11px] font-extrabold uppercase tracking-widest text-slate-500 font-sans">
+            System Preferences
           </div>
-        )}
-
-        {/* Navigation Tabs */}
-        <nav className="space-y-1.5">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
             return (
               <div
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`nav-item ${isActive ? 'active' : ''}`}
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`nav-pill ${isActive ? 'active' : ''}`}
               >
-                <Icon className={`w-5 h-5 ${isActive ? 'text-cyan-400' : 'text-slate-400'}`} />
-                <span>{tab.label}</span>
+                {isActive && (
+                  <motion.div
+                    layoutId="activeSidebarPill"
+                    className="absolute inset-0 bg-indigo-500/20 border border-indigo-400/35 rounded-[16px] shadow-[0_4px_20px_-3px_rgba(99,102,241,0.3)]"
+                    transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                  />
+                )}
+                <div className={`p-2.5 rounded-xl transition-all relative z-10 ${
+                  isActive ? 'bg-indigo-500/30 text-indigo-300 shadow-md shadow-indigo-500/20' : 'text-slate-400'
+                }`}>
+                  <Icon className="w-5 h-5 nav-icon" />
+                </div>
+                <span className="relative z-10 font-bold text-[15px]">{item.label}</span>
               </div>
             );
           })}
         </nav>
       </div>
 
-      {/* Footer / Apply CTA */}
-      <div className="pt-4 border-t border-[rgba(255,255,255,0.08)] space-y-4">
-        <div className="flex items-center gap-2 text-xs text-slate-400 px-1">
-          <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
-          <span>Privilege helper invokes <strong className="text-slate-200">pkexec</strong> for atomic upgrades.</span>
+      {/* Atmospheric Footer & Deploy Controls with balanced padding */}
+      <div className="space-y-5 pt-6 border-t border-white/[0.07]">
+        <div className="px-2 space-y-1">
+          <span className="text-xs font-semibold text-slate-400 block font-mono">Host Workstation:</span>
+          <span className="font-extrabold text-sm text-white block truncate" title={String(distro?.distro_name || 'Ubuntu Linux')}>
+            {String(distro?.distro_name || 'Ubuntu Linux')}
+          </span>
         </div>
 
+        {/* Action Button */}
         <button
           onClick={onApplyChanges}
           disabled={!hasPendingChanges || isApplying}
-          className="glow-btn w-full justify-center text-sm py-3 relative overflow-hidden"
+          className={`w-full justify-center py-4 text-xs font-extrabold transition-all rounded-2xl flex items-center gap-2.5 ${
+            hasPendingChanges 
+              ? 'btn-luminous animate-pulse shadow-xl shadow-indigo-500/35 text-white' 
+              : 'bg-white/[0.035] text-slate-400 border border-white/[0.07] cursor-not-allowed shadow-inner font-bold'
+          }`}
         >
           {isApplying ? (
-            <span>Running Generator...</span>
+            <>
+              <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" />
+              <span>Deploying...</span>
+            </>
           ) : hasPendingChanges ? (
-            <span>Apply to /etc/default/grub</span>
+            <>
+              <Save className="w-4 h-4" />
+              <span>Deploy Configurations</span>
+            </>
           ) : (
-            <span>Config Synchronized</span>
+            <>
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 stroke-[2.5]" />
+              <span>System Synchronized</span>
+            </>
           )}
         </button>
       </div>
-    </div>
+    </aside>
   );
 };
