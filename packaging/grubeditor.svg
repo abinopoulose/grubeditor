@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e3a8a" />
+      <stop offset="50%" stop-color="#0e7490" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+    <linearGradient id="shieldGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  
+  <!-- Rounded App Tile Background -->
+  <rect x="32" y="32" width="448" height="448" rx="110" fill="url(#bgGlow)" />
+  <rect x="36" y="36" width="440" height="440" rx="106" fill="#0b111e" opacity="0.92" />
+  
+  <!-- Outer Shield Emblem -->
+  <path d="M256 64 L384 112 V232 C384 340 294 424 256 448 C218 424 128 340 128 232 V112 Z" 
+        fill="none" stroke="url(#shieldGlow)" stroke-width="24" stroke-linejoin="round" filter="url(#glow)" />
+        
+  <!-- Inner Shield Fill -->
+  <path d="M256 92 L364 133 V232 C364 322 284 394 256 416 C228 394 148 322 148 232 V133 Z" 
+        fill="#0f172a" opacity="0.8" />
+        
+  <!-- Terminal Prompt Icon (<_>) -->
+  <g transform="translate(180, 210)" stroke="#10b981" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Greater Than Symbol / Prompt Arrow -->
+    <path d="M 0 0 L 45 35 L 0 70" />
+    <!-- Underscore Cursor -->
+    <line x1="60" y1="70" x2="110" y2="70" stroke="#06b6d4" stroke-width="24" />
+  </g>
+  
+  <!-- Decorative Header Dots (Traffic Lights) -->
+  <circle cx="216" cy="150" r="8" fill="#ef4444" />
+  <circle cx="256" cy="150" r="8" fill="#f59e0b" />
+  <circle cx="296" cy="150" r="8" fill="#10b981" />
+</svg>

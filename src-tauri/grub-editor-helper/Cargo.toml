@@ -1,0 +1,13 @@
+[package]
+name = "grub-editor-helper"
+version = "0.1.0"
+description = "Privileged Polkit helper binary for GrubEditor bootloader manager"
+authors = ["GrubEditor Team"]
+edition = "2021"
+
+[dependencies]
+grub-editor-core = { path = "../grub-editor-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+anyhow = "1"

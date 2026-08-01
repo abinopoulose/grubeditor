@@ -1,0 +1,18 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=GrubEditor
+GenericName=Bootloader Customizer
+Comment=Modern Linux GRUB bootloader customizer with Wayland compatibility, theme verification, and atomic rollback
+Icon=grubeditor
+Exec=grubeditor
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=grub;bootloader;uefi;theme;linux;kernel;dual-boot;recovery;
+StartupNotify=true
+Actions=Snapshots;
+
+[Desktop Action Snapshots]
+Name=Restore Recovery Snapshot
+Exec=grubeditor --recovery
+Icon=document-revert
