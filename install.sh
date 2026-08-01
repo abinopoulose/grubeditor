@@ -23,11 +23,11 @@ NC='\033[0m' # No Color
 
 echo -e "${CYAN}${BOLD}"
 echo "  ____________________________________________________________________  "
-     echo " |                                                                    | "
-     echo " |     [ GRUBEDITOR ]  Universal One-Command Ubuntu Installer         | "
-     echo " |     Wayland Native • Polkit Safe • Live Theme Simulator            | "
-     echo " |____________________________________________________________________| "
-     echo -e "${NC}"
+echo " |                                                                    | "
+echo " |     [ GRUBEDITOR ]  Universal One-Command Ubuntu Installer         | "
+echo " |     Wayland Native • Polkit Safe • Live Theme Simulator            | "
+echo " |____________________________________________________________________| "
+echo -e "${NC}"
 
 # 1. Root Authorization Verification
 if [ "$EUID" -ne 0 ]; then
