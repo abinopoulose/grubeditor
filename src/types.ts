@@ -1,7 +1,7 @@
 export type DistroFamily = 'DebianUbuntu' | 'FedoraRHEL' | 'ArchLinux' | 'OpenSuse' | 'GenericLinux';
 
 export interface BootloaderConfig {
-  distro_name: String;
+  distro_name: string;
   family: DistroFamily;
   default_grub_path: string;
   grub_dir: string;
@@ -44,6 +44,8 @@ export interface Snapshot {
   default_grub_backup: string;
   grub_cfg_backup?: string;
   bls_entries_backup?: string;
+  config_snapshot?: Record<string, string>;
+  entries_snapshot?: BootEntry[];
 }
 
 export interface BootEntry {
@@ -51,4 +53,9 @@ export interface BootEntry {
   id?: string;
   version?: string;
   options?: string;
+  enabled?: boolean;
+  deleted?: boolean;
+  isCurrent?: boolean;
+  type?: 'linux' | 'windows' | 'recovery' | 'efi' | 'custom';
+  isCustom?: boolean;
 }

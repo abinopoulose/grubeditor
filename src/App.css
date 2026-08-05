@@ -4,12 +4,12 @@
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
   
-  --bg-app: #03050c;
+  --bg-app: #080c16;
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
-  --border-subtle: rgba(255, 255, 255, 0.10);
-  --border-card: rgba(255, 255, 255, 0.12);
-  --card-bg: rgba(8, 12, 24, 0.82);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-card: rgba(255, 255, 255, 0.10);
+  --card-bg: rgba(15, 23, 42, 0.55);
 }
 
 * {
@@ -27,138 +27,103 @@ body {
   line-height: 1.6;
   overflow-x: hidden;
   background-image: 
-    radial-gradient(circle at 50% -10%, rgba(99, 102, 241, 0.12) 0%, transparent 45%),
-    radial-gradient(circle at 90% 90%, rgba(59, 130, 246, 0.06) 0%, transparent 35%);
+    radial-gradient(circle at 30% -10%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.05) 0%, transparent 40%);
   background-attachment: fixed;
-}
-
-/* Sidebar structure */
-.pro-sidebar {
-  background: #050710;
-  border-right: 1px solid var(--border-subtle);
 }
 
 /* ────────────────────── Card System ────────────────────── */
 .ui-card {
   background: var(--card-bg);
   border: 1px solid var(--border-card);
-  border-radius: 24px;
-  box-shadow: 0 10px 40px -12px rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  border-radius: 20px;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   overflow: hidden;
   transition: all 0.2s ease;
 }
 
-.ui-card-header {
-  padding: 28px 32px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.ui-card-title {
-  font-size: 1.35rem;
-  font-weight: 800;
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  letter-spacing: -0.01em;
-}
-
-.ui-card-description {
-  font-size: 0.875rem;
-  color: #94a3b8;
-  line-height: 1.7;
-  margin-top: 6px;
-}
-
-.ui-card-content {
-  padding: 24px 32px 28px;
-}
-
 /* ──────────── Interactive Selection Card ──────────── */
 .selection-card {
-  padding: 24px 28px;
-  border-radius: 20px;
+  padding: 22px 26px;
+  border-radius: 18px;
   border: 1px solid var(--border-card);
-  background: rgba(7, 10, 22, 0.85);
+  background: rgba(15, 23, 42, 0.65);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.5);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 15px -4px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
 }
 .selection-card:hover {
-  border-color: rgba(255, 255, 255, 0.2);
-  background: rgba(12, 18, 37, 0.95);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.6);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(30, 41, 75, 0.7);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.5);
 }
 .selection-card.active {
-  background: linear-gradient(135deg, rgba(49, 46, 129, 0.5) 0%, rgba(16, 22, 44, 0.9) 100%);
-  border-color: rgba(99, 102, 241, 0.6);
-  box-shadow: 0 8px 30px -8px rgba(99, 102, 241, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  ring: 1px solid rgba(99, 102, 241, 0.3);
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.25) 0%, rgba(30, 41, 75, 0.85) 100%);
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 8px 25px -8px rgba(99, 102, 241, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 /* ──────────── Toggle/Switch Card ──────────── */
 .toggle-card {
-  padding: 28px 32px;
-  border-radius: 24px;
+  padding: 22px 26px;
+  border-radius: 18px;
   border: 1px solid var(--border-card);
-  background: rgba(7, 10, 22, 0.85);
+  background: rgba(15, 23, 42, 0.65);
   cursor: pointer;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   justify-content: space-between;
   gap: 20px;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 20px -6px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 15px -4px rgba(0, 0, 0, 0.4);
 }
 .toggle-card:hover {
   border-color: rgba(255, 255, 255, 0.18);
-  background: rgba(12, 18, 37, 0.95);
+  background: rgba(30, 41, 75, 0.7);
 }
 .toggle-card.active {
-  background: linear-gradient(135deg, rgba(49, 46, 129, 0.35) 0%, rgba(8, 13, 29, 0.95) 100%);
-  border-color: rgba(99, 102, 241, 0.5);
-  box-shadow: 0 8px 25px -8px rgba(99, 102, 241, 0.2);
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.2) 0%, rgba(30, 41, 75, 0.8) 100%);
+  border-color: rgba(99, 102, 241, 0.45);
 }
 
 /* ────────────────────── Luminous Action Button ────────────────────── */
 .btn-luminous {
-  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 50%, #2563eb 100%);
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
   color: #ffffff;
-  font-weight: 700;
+  font-family: var(--font-sans);
+  font-weight: 600;
   font-size: 0.875rem;
-  padding: 0.85rem 1.75rem;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  padding: 0.75rem 1.5rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 8px 25px -5px rgba(99, 102, 241, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 18px -4px rgba(99, 102, 241, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.25);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
 }
-
 .btn-luminous:hover:not(:disabled) {
-  filter: brightness(1.12);
-  box-shadow: 0 12px 32px -5px rgba(99, 102, 241, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.4);
-  transform: translateY(-2px);
+  filter: brightness(1.1);
+  box-shadow: 0 8px 25px -4px rgba(99, 102, 241, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transform: translateY(-1px);
 }
-
 .btn-luminous:active:not(:disabled) {
   transform: translateY(0);
 }
-
 .btn-luminous:disabled {
-  background: rgba(30, 41, 59, 0.4);
-  color: rgba(148, 163, 184, 0.35);
-  border-color: rgba(255, 255, 255, 0.03);
+  background: rgba(30, 41, 59, 0.5);
+  color: rgba(148, 163, 184, 0.4);
+  border-color: rgba(255, 255, 255, 0.04);
   box-shadow: none;
   cursor: not-allowed;
   transform: none;
@@ -166,272 +131,106 @@ body {
 
 /* ────────────────────── Clean glass button ────────────────────── */
 .btn-glass {
-  background: rgba(255, 255, 255, 0.04);
-  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e8f0;
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: 0.825rem;
-  padding: 0.6rem 1.35rem;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.6rem 1.25rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   transition: all 0.2s ease;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   cursor: pointer;
 }
-
 .btn-glass:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
   color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.18);
   transform: translateY(-1px);
-}
-
-/* ────────────────────── Navigation items ────────────────────── */
-.nav-pill {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  padding: 0.85rem 1.15rem;
-  border-radius: 16px;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: color 0.2s ease;
-  font-weight: 500;
-  font-size: 0.925rem;
-}
-
-.nav-pill:hover:not(.active) {
-  color: #ffffff;
-}
-
-.nav-pill.active {
-  color: #ffffff;
-  font-weight: 600;
 }
 
 /* ────────────────────── Segmented Control Track ────────────────────── */
 .segmented-track {
   display: inline-flex;
-  background: rgba(3, 5, 12, 0.9);
+  background: rgba(10, 15, 30, 0.85);
   padding: 5px;
-  border-radius: 18px;
+  border-radius: 16px;
   border: 1px solid var(--border-subtle);
-  gap: 5px;
+  gap: 4px;
 }
 
 .segmented-pill {
   position: relative;
-  padding: 0.6rem 1.35rem;
-  border-radius: 14px;
+  padding: 0.55rem 1.35rem;
+  border-radius: 12px;
+  font-family: var(--font-sans);
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-muted);
   transition: all 0.2s ease;
   cursor: pointer;
   white-space: nowrap;
-  z-index: 10;
   background: transparent;
   border: none;
 }
-
 .segmented-pill:hover:not(.active) {
   color: #ffffff;
+  background: rgba(255, 255, 255, 0.04);
 }
-
 .segmented-pill.active {
   color: #ffffff;
+  background: #4f46e5;
+  box-shadow: 0 4px 15px -3px rgba(79, 70, 229, 0.4);
 }
 
 /* ────────────────────── Text Input ────────────────────── */
 .text-input {
-  background: #020409;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: #a5b4fc;
-  font-family: var(--font-mono);
-  font-size: 1rem;
-  font-weight: 600;
-  padding: 16px 24px;
-  border-radius: 16px;
+  background: rgba(10, 15, 30, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f8fafc;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 500;
+  padding: 12px 18px;
+  border-radius: 12px;
   width: 100%;
   outline: none;
   transition: all 0.2s ease;
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25);
 }
-
 .text-input:focus {
-  border-color: rgba(99, 102, 241, 0.6);
-  background: #000000;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15), inset 0 2px 6px rgba(0, 0, 0, 0.3);
+  border-color: rgba(99, 102, 241, 0.7);
+  background: rgba(15, 23, 42, 0.95);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15), inset 0 2px 4px rgba(0, 0, 0, 0.2);
 }
-
 .text-input::placeholder {
-  color: rgba(148, 163, 184, 0.4);
-}
-
-/* ────────────────────── Diagnostic Box (for Theme Diagnostics) ────────────────────── */
-.diagnostic-box {
-  background: rgba(3, 5, 11, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 20px 24px;
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.diagnostic-box .diagnostic-header {
-  font-size: 0.8rem;
-  font-weight: 800;
-  color: #e2e8f0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  margin-bottom: 12px;
-}
-
-.diagnostic-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 0;
-  font-size: 0.875rem;
-}
-
-/* ────────────────────── Info banner ────────────────────── */
-.info-banner {
-  background: var(--card-bg);
-  border: 1px solid var(--border-card);
-  border-left: 4px solid #10b981;
-  border-radius: 24px;
-  box-shadow: 0 8px 30px -10px rgba(0, 0, 0, 0.6);
-  overflow: hidden;
-}
-
-/* ────────────────────── Snapshot item card ────────────────────── */
-.snapshot-card {
-  padding: 28px 32px;
-  border-radius: 24px;
-  border: 1px solid var(--border-card);
-  background: rgba(7, 10, 22, 0.85);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 28px;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.5);
-}
-.snapshot-card:hover {
-  border-color: rgba(255, 255, 255, 0.18);
-  background: rgba(12, 18, 37, 0.95);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.6);
+  color: rgba(148, 163, 184, 0.45);
 }
 
 /* ────────────────────── Icon Box ────────────────────── */
 .icon-box {
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 .icon-box.default {
-  background: rgba(15, 23, 42, 0.9);
+  background: rgba(30, 41, 75, 0.6);
   color: #94a3b8;
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 .icon-box.active {
-  background: #6366f1;
+  background: #4f46e5;
   color: #ffffff;
-  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
-  transform: scale(1.05);
-}
-
-/* ────────────────────── Check indicator ────────────────────── */
-.check-indicator {
-  width: 32px;
-  height: 32px;
-  border-radius: 9999px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: all 0.2s ease;
-}
-.check-indicator.default {
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  opacity: 0.3;
-}
-.check-indicator.active {
-  background: #6366f1;
-  color: #ffffff;
-  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
-  transform: scale(1.1);
-}
-
-/* ────────────────────── Badge ────────────────────── */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 14px;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 800;
-  border: 1px solid;
-}
-.badge.indigo {
-  background: rgba(99, 102, 241, 0.15);
-  color: #a5b4fc;
-  border-color: rgba(99, 102, 241, 0.3);
-}
-.badge.emerald {
-  background: rgba(16, 185, 129, 0.15);
-  color: #6ee7b7;
-  border-color: rgba(16, 185, 129, 0.4);
-}
-
-/* ────────────────────── Code tag ────────────────────── */
-.code-tag {
-  background: rgba(15, 23, 42, 0.95);
-  color: #a5b4fc;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 8px 16px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.3);
-}
-
-/* ────────────────────── Category tag (small) ────────────────────── */
-.category-tag {
-  font-size: 0.625rem;
-  font-family: var(--font-mono);
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  padding: 3px 10px;
-  border-radius: 6px;
-  background: rgba(99, 102, 241, 0.15);
-  color: #a5b4fc;
-  border: 1px solid rgba(99, 102, 241, 0.3);
-}
-
-/* ────────────────────── Status label ────────────────────── */
-.status-label {
-  font-size: 0.7rem;
-  font-family: var(--font-mono);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #64748b;
+  box-shadow: 0 4px 15px rgba(79, 70, 229, 0.35);
 }
 
 /* ────────────────────── Scrollbar ────────────────────── */
@@ -442,11 +241,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.3);
 }
 
 /* ────────────────────── Animations ────────────────────── */
@@ -456,11 +255,5 @@ body {
 }
 
 .animate-pro {
-  animation: smoothFade 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-/* ────────────────────── Section dividers ────────────────────── */
-.section-divider {
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding-top: 48px;
+  animation: smoothFade 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

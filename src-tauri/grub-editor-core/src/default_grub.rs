@@ -45,6 +45,14 @@ impl GrubDefaultConfig {
                 lines.push(ConfigLine::Comment(line.to_string()));
             }
         }
+        // FIX Flaw 9: Preserve trailing newline from original content.
+        // `str::lines()` strips the final trailing newline, causing round-trip to lose it.
+        // If the original ended with a newline and the last parsed line isn't empty, 
+        // the output will naturally have a trailing newline from the last line's `\n`.
+        // But if it ended with multiple newlines (blank lines at end), we need to preserve them.
+        if content.ends_with("\n\n") {
+            lines.push(ConfigLine::Empty);
+        }
         Self { lines }
     }
 

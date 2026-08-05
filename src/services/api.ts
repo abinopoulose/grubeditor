@@ -75,29 +75,62 @@ let mockThemes: ThemeMetadata[] = [
   }
 ];
 
+let mockBootEntries: BootEntry[] = [
+  { title: "Ubuntu 24.04 LTS (Kernel 6.8.0-45-generic)", id: "ubuntu", options: "quiet splash nvidia-drm.modeset=1", enabled: true, isCurrent: true, type: "linux" },
+  { title: "Ubuntu 24.04 LTS (Recovery Mode / Advanced options)", id: "ubuntu-recovery", options: "single nomodeset", enabled: true, type: "recovery" },
+  { title: "Windows 11 Pro (on /dev/nvme0n1p1 via OS-Prober)", id: "windows-efi", enabled: true, type: "windows" },
+  { title: "Fedora 40 Workstation (on /dev/sdb2)", id: "fedora-bls", enabled: true, type: "linux" }
+];
+
+export function formatSnapshotDate(timestampOrDate: number | Date = Date.now()): string {
+  const d = typeof timestampOrDate === 'number' ? new Date(timestampOrDate) : timestampOrDate;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const seconds = String(d.getSeconds()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const strHours = String(hours).padStart(2, '0');
+  return `${day}/${month}/${year} ${strHours}:${minutes}:${seconds} ${ampm}`;
+}
+
 let mockSnapshots: Snapshot[] = [
   {
     timestamp: Date.now() - 3600000 * 24,
-    date_string: new Date(Date.now() - 3600000 * 24).toLocaleString(),
+    date_string: formatSnapshotDate(Date.now() - 3600000 * 24),
     description: "Initial pristine post-install configuration",
     default_grub_backup: "/var/lib/grub-editor/backups/snap_1/default_grub.bak",
-    grub_cfg_backup: "/var/lib/grub-editor/backups/snap_1/grub.cfg.bak"
+    grub_cfg_backup: "/var/lib/grub-editor/backups/snap_1/grub.cfg.bak",
+    config_snapshot: { ...mockConfig },
+    entries_snapshot: mockBootEntries.map(e => ({ ...e }))
   },
   {
     timestamp: Date.now() - 3600000 * 4,
-    date_string: new Date(Date.now() - 3600000 * 4).toLocaleString(),
-    description: "Auto-backup before switching to theme Vince-Cyberpunk",
+    date_string: formatSnapshotDate(Date.now() - 3600000 * 4),
+    description: "Manual configuration checkpoint",
     default_grub_backup: "/var/lib/grub-editor/backups/snap_2/default_grub.bak",
-    grub_cfg_backup: "/var/lib/grub-editor/backups/snap_2/grub.cfg.bak"
+    grub_cfg_backup: "/var/lib/grub-editor/backups/snap_2/grub.cfg.bak",
+    config_snapshot: { ...mockConfig },
+    entries_snapshot: mockBootEntries.map(e => ({ ...e }))
   }
 ];
 
-let mockBootEntries: BootEntry[] = [
-  { title: "Ubuntu 24.04 LTS (Kernel 6.8.0-45-generic)", id: "ubuntu", options: "quiet splash nvidia-drm.modeset=1" },
-  { title: "Ubuntu 24.04 LTS (Recovery Mode / Advanced options)", id: "ubuntu-recovery", options: "single nomodeset" },
-  { title: "Windows 11 Pro (on /dev/nvme0n1p1 via OS-Prober)", id: "windows-efi" },
-  { title: "Fedora 40 Workstation (on /dev/sdb2)", id: "fedora-bls" }
-];
+function createSnapshotRecord(description: string, defaultBackupPath?: string) {
+  const newTs = Math.max(Date.now(), (mockSnapshots[0]?.timestamp || 0) + 1);
+  const backupPath = defaultBackupPath || `/var/lib/grub-editor/backups/snap_${newTs}/default_grub.bak`;
+  mockSnapshots.unshift({
+    timestamp: newTs,
+    date_string: formatSnapshotDate(newTs),
+    description,
+    default_grub_backup: backupPath,
+    grub_cfg_backup: `/var/lib/grub-editor/backups/snap_${newTs}/grub.cfg.bak`,
+    config_snapshot: { ...mockConfig },
+    entries_snapshot: mockBootEntries.map(e => ({ ...e }))
+  });
+}
 
 export const ApiService = {
   async getDistro(): Promise<BootloaderConfig> {
@@ -105,38 +138,147 @@ export const ApiService = {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
         return await invoke<BootloaderConfig>('detect_distro');
-      } catch {
+      } catch (err) {
+        console.error("Failed to detect native distro, falling back to mock:", err);
         return mockDistro;
       }
+    }
+    try {
+      const res = await fetch('/api/distro');
+      if (res.ok) return await res.json();
+    } catch (err) {
+      console.warn("Vite backend API not reachable, falling back to simulation mock data:", err);
     }
     return mockDistro;
   },
 
   async getGrubConfig(): Promise<Record<string, string>> {
+    if (isTauri) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        return await invoke<Record<string, string>>('get_grub_config');
+      } catch (err) {
+        console.error("Failed to load native GRUB config, falling back to mock:", err);
+      }
+    }
+    try {
+      const res = await fetch('/api/grub-config');
+      if (res.ok) return await res.json();
+    } catch (err) {
+      console.warn("Vite backend API not reachable, falling back to simulation mock config:", err);
+    }
     return { ...mockConfig };
   },
 
-  async saveGrubConfig(newConfig: Record<string, string>, reason = "Manual modification in General Settings"): Promise<boolean> {
+  async saveGrubConfig(newConfig: Record<string, string>, reason = "Manual modification in General Settings", createSnapshot = true): Promise<boolean> {
+    if (isTauri) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke<boolean>('save_grub_config', { newConfig, reason, createSnapshot });
+      } catch (err) {
+        console.error("Failed to save native GRUB config:", err);
+        throw err;
+      }
+    } else {
+      try {
+        await fetch('/api/save-grub-config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ newConfig, reason, createSnapshot })
+        });
+      } catch (e) {
+        console.warn("Could not save to live system via Vite API:", e);
+      }
+    }
     mockConfig = { ...newConfig };
-    // Automatically create snapshot on save
-    mockSnapshots.unshift({
-      timestamp: Date.now(),
-      date_string: new Date().toLocaleString(),
-      description: `Auto-backup: ${reason}`,
-      default_grub_backup: `/var/lib/grub-editor/backups/snap_${Date.now()}/default_grub.bak`
-    });
+    if (createSnapshot) {
+      createSnapshotRecord(reason);
+    }
     return true;
   },
 
   async scanThemes(): Promise<ThemeMetadata[]> {
+    if (isTauri) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        return await invoke<ThemeMetadata[]>('scan_themes');
+      } catch (err) {
+        console.error("Failed to scan native themes, falling back to mock:", err);
+      }
+    }
+    try {
+      const res = await fetch('/api/scan-themes');
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn("Could not fetch system themes via Vite API:", e);
+    }
     return [...mockThemes];
   },
 
   async getBootEntries(): Promise<BootEntry[]> {
-    return [...mockBootEntries];
+    if (isTauri) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const entries = await invoke<BootEntry[]>('get_boot_entries');
+        return entries.map((e, index) => ({ ...e, id: e.id || `sys-target-${index}` }));
+      } catch (err) {
+        console.error("Failed to load native boot entries, falling back to mock:", err);
+      }
+    }
+    try {
+      const res = await fetch('/api/boot-entries');
+      if (res.ok) {
+        const entries: BootEntry[] = await res.json();
+        return entries.map((e, index) => ({ ...e, id: e.id || `sys-target-${index}` }));
+      }
+    } catch (e) {
+      console.warn("Could not fetch system boot entries via Vite API:", e);
+    }
+    return mockBootEntries.map((e, index) => ({ ...e, id: e.id || `sys-target-${index}` }));
+  },
+
+  async saveBootEntries(newEntries: BootEntry[], reason = "Modified boot menu entries & ordering in Boot Menu Options", createSnapshot = true): Promise<boolean> {
+    if (isTauri) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('save_boot_entries', { newEntries, reason, createSnapshot });
+      } catch (err) {
+        console.error("Failed to save native boot entries:", err);
+        throw err;
+      }
+    } else {
+      try {
+        await fetch('/api/save-boot-entries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ newEntries, reason, createSnapshot })
+        });
+      } catch (e) {}
+    }
+    mockBootEntries = [...newEntries];
+    if (createSnapshot) {
+      createSnapshotRecord(`Auto-backup: ${reason}`);
+    }
+    return true;
   },
 
   async applyTheme(themeName: string): Promise<boolean> {
+    if (isTauri) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        return await invoke<boolean>('apply_theme', { themeName });
+      } catch (err) {
+        console.error("Failed to apply native theme:", err);
+        throw err;
+      }
+    }
+    try {
+      await fetch('/api/apply-theme', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ themeName })
+      });
+    } catch (e) {}
     const target = mockThemes.find(t => t.name === themeName);
     if (target && !target.is_valid) {
       throw new Error("Cannot install invalid theme with broken permissions or missing font assets!");
@@ -144,39 +286,76 @@ export const ApiService = {
     if (target) {
       mockConfig["GRUB_THEME"] = `${target.path}/theme.txt`;
       mockConfig["GRUB_TERMINAL_OUTPUT"] = "gfxterm";
-      mockSnapshots.unshift({
-        timestamp: Date.now(),
-        date_string: new Date().toLocaleString(),
-        description: `Applied theme ${themeName}`,
-        default_grub_backup: `/var/lib/grub-editor/backups/snap_${Date.now()}/default_grub.bak`
-      });
+      createSnapshotRecord(`Applied theme ${themeName}`);
     }
     return true;
   },
 
   async getSnapshots(): Promise<Snapshot[]> {
+    if (isTauri) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        return await invoke<Snapshot[]>('get_snapshots');
+      } catch (err) {
+        console.error("Failed to fetch native snapshots, falling back to mock:", err);
+      }
+    }
+    try {
+      const res = await fetch('/api/snapshots');
+      if (res.ok) return await res.json();
+    } catch (e) {}
     return [...mockSnapshots];
   },
 
   async restoreSnapshot(timestamp: number): Promise<boolean> {
+    if (isTauri) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        return await invoke<boolean>('restore_snapshot', { timestamp });
+      } catch (err) {
+        console.error("Failed to restore native snapshot:", err);
+        throw err;
+      }
+    }
+    try {
+      await fetch('/api/restore-snapshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timestamp })
+      });
+    } catch (e) {}
     const found = mockSnapshots.find(s => s.timestamp === timestamp);
     if (!found) throw new Error("Snapshot timestamp ID not found");
-    // Emulate rollback
-    mockSnapshots.unshift({
-      timestamp: Date.now(),
-      date_string: new Date().toLocaleString(),
-      description: `Rollback restore to state from ${found.date_string}`,
-      default_grub_backup: found.default_grub_backup
-    });
+    if (found.config_snapshot) mockConfig = { ...found.config_snapshot };
+    if (found.entries_snapshot) mockBootEntries = found.entries_snapshot.map(e => ({ ...e }));
+    createSnapshotRecord(`Rollback restore to state from ${found.date_string}`, found.default_grub_backup);
     return true;
   },
 
   async triggerRegen(): Promise<{ success: boolean; output: string }> {
+    if (isTauri) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        return await invoke<{ success: boolean; output: string }>('trigger_regen');
+      } catch (err) {
+        console.error("Failed to trigger native regeneration:", err);
+        return { success: false, output: `Regeneration failed: ${err}` };
+      }
+    }
+    try {
+      const res = await fetch('/api/trigger-regen', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.output) return data;
+      }
+    } catch (e) {}
     await new Promise(res => setTimeout(res, 1200)); // Emulate generator runtime
     const bin = mockDistro.regen_command.join(" ");
+    const entryLogs = mockBootEntries.filter(e => e.enabled !== false).map(e => `Configuring boot menu entry: '${e.title}'`).join("\n");
     return {
       success: true,
-      output: `[Polkit Authorization Granted]\nRunning ${bin}...\nSourcing file \`/etc/default/grub'\nSourcing file \`/etc/default/grub.d/init-select.cfg'\nGenerating grub configuration file ...\nFound theme: ${mockConfig["GRUB_THEME"] || "none"}\nFound linux image: /boot/vmlinuz-6.8.0-45-generic\nFound initrd image: /boot/initramfs-6.8.0-45-generic.img\nFound Windows Boot Manager on /dev/nvme0n1p1@/EFI/Microsoft/Boot/bootmgfw.efi\nAdding boot menu entry for UEFI Firmware Settings ...\ndone`
+      output: `[Polkit Authorization Granted]\nRunning ${bin}...\nSourcing file \`/etc/default/grub'\nSourcing file \`/etc/default/grub.d/init-select.cfg'\nGenerating grub configuration file ...\nFound theme: ${mockConfig["GRUB_THEME"] || "none"}\n${entryLogs}\nAdding boot menu entry for UEFI Firmware Settings ...\nCompilation complete. Synchronized boot loader configuration to partition.\ndone`
     };
   }
 };
+

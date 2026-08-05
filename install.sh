@@ -33,7 +33,7 @@ echo -e "${NC}"
 if [ "$EUID" -ne 0 ]; then
     echo -e "${AMBER}Notice:${NC} Administrative root privileges are required to configure system bootloader permissions and GNOME desktop menu launchers."
     echo -e "${BLUE}Re-launching installer under sudo...${NC}"
-    exec sudo bash "$0" "$@"
+    exec sudo env PATH="$PATH" bash "$0" "$@"
 fi
 
 # 2. Host OS Distro Compatibility Inspection
@@ -84,15 +84,31 @@ if [ -f "${SCRIPT_DIR}/packaging/io.grubeditor.helper.policy" ] && [ -f "${SCRIP
         echo -e "   ${AMBER}Notice:${NC} Local compiled native binaries not found in target/release/."
         echo -e "   Creating fallback local simulation execution wrapper in ${INSTALL_DIR}/grubeditor so you can launch immediately..."
         
-        # Create a clean executable script in /usr/bin/grubeditor that opens the application in web/simulation mode if compiled binaries aren't built yet!
-        cat << 'EOF' > "${INSTALL_DIR}/grubeditor"
+        # Create a clean executable script in /usr/bin/grubeditor that elevates once at launch and opens the application in web/simulation mode if compiled binaries aren't built yet!
+        cat << EOF > "${INSTALL_DIR}/grubeditor"
 #!/usr/bin/env bash
 # GrubEditor Launcher Wrapper
+if [ "\$EUID" -ne 0 ]; then
+    echo "GrubEditor requires root permissions to manage system bootloader files (/boot/grub/grub.cfg)."
+    echo "Elevating privileges once via sudo so all features run seamlessly without browser prompts..."
+    exec sudo env PATH="\$PATH" bash "\$0" "\$@"
+fi
+
+# Re-attach user Node/npm environments (NVM, fnm, asdf, local bin) when running under sudo
+if [ -n "\$SUDO_USER" ] && [ "\$SUDO_USER" != "root" ]; then
+    USER_HOME=\$(getent passwd "\$SUDO_USER" | cut -d: -f6)
+    for dir in "\$USER_HOME"/.nvm/versions/node/*/bin "\$USER_HOME"/.local/share/fnm "\$USER_HOME"/.asdf/shims "\$USER_HOME"/.local/bin; do
+        if [ -d "\$dir" ]; then
+            export PATH="\$dir:\$PATH"
+        fi
+    done
+fi
+
 if [ -x "/usr/lib/grubeditor/tauri-app" ]; then
-    exec /usr/lib/grubeditor/tauri-app "$@"
-elif [ -d "${HOME}/dev/grub_editor" ] && command -v npm >/dev/null 2>&1; then
+    exec /usr/lib/grubeditor/tauri-app "\$@"
+elif [ -d "${SCRIPT_DIR}" ] && command -v npm >/dev/null 2>&1; then
     echo "Launching GrubEditor in developer desktop UI mode..."
-    cd "${HOME}/dev/grub_editor" && npm run dev
+    cd "${SCRIPT_DIR}" && exec npm run dev
 else
     echo "GrubEditor GUI requires compilation. Run 'npm run tauri build' in your project directory."
     exit 1

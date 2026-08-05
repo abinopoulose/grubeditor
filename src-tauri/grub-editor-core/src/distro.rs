@@ -24,6 +24,13 @@ pub struct BootloaderConfig {
 }
 
 impl BootloaderConfig {
+    pub fn is_root() -> bool {
+        #[cfg(unix)]
+        unsafe { libc::getuid() == 0 }
+        #[cfg(not(unix))]
+        false
+    }
+
     /// Automatically detects the host Linux distribution and resolves accurate GRUB asset paths and generator commands.
     pub fn detect() -> Self {
         let (distro_name, family) = Self::parse_os_release();

@@ -2,6 +2,7 @@ use grub_editor_core::distro::BootloaderConfig;
 use grub_editor_core::default_grub::GrubDefaultConfig;
 use grub_editor_core::snapshots::SnapshotManager;
 use grub_editor_core::theme::ThemeValidator;
+use grub_editor_core::menu_entries::MenuEntryParser;
 use std::env;
 use std::fs;
 use std::process::Command;
@@ -10,7 +11,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         eprintln!("Usage: grub-editor-helper <command> [args...]");
-        eprintln!("Commands: detect-distro, read-config, write-config, scan-themes, apply-theme, regenerate, create-snapshot, list-snapshots, restore-snapshot");
+        eprintln!("Commands: detect-distro, read-config, write-config, read-boot-entries, scan-themes, apply-theme, regenerate, create-snapshot, list-snapshots, restore-snapshot");
         std::process::exit(1);
     }
 
@@ -20,6 +21,15 @@ fn main() {
     match args[1].as_str() {
         "detect-distro" => {
             println!("{}", serde_json::to_string_pretty(&distro).unwrap());
+        }
+        "read-boot-entries" => {
+            match MenuEntryParser::get_system_boot_entries(&distro) {
+                Ok(entries) => println!("{}", serde_json::to_string_pretty(&entries).unwrap()),
+                Err(e) => {
+                    eprintln!("Failed to read boot entries: {}", e);
+                    std::process::exit(1);
+                }
+            }
         }
         "read-config" => {
             let path = &distro.default_grub_path;
@@ -47,7 +57,15 @@ fn main() {
 
             let rendered = config.to_config_string();
             match fs::write(&distro.default_grub_path, rendered) {
-                Ok(_) => println!("{{\"status\": \"success\", \"message\": \"Successfully updated /etc/default/grub\"}}"),
+                Ok(_) => {
+                    // FIX Flaw 6: Use serde_json for safe JSON serialization instead of
+                    // hand-crafted format strings that are vulnerable to injection.
+                    let res = serde_json::json!({
+                        "status": "success",
+                        "message": "Successfully updated /etc/default/grub"
+                    });
+                    println!("{}", serde_json::to_string_pretty(&res).unwrap());
+                }
                 Err(e) => {
                     eprintln!("Failed to write to {:?}: {}", distro.default_grub_path, e);
                     std::process::exit(1);
@@ -91,7 +109,9 @@ fn main() {
             }
 
             // Create backup before applying
-            let _ = snapshot_mgr.create_snapshot(&format!("Auto-backup before switching to theme {}", audit.name), &distro);
+            if let Err(e) = snapshot_mgr.create_snapshot(&format!("Auto-backup before switching to theme {}", audit.name), &distro) {
+                eprintln!("Warning: Failed to create pre-theme-switch backup: {}", e);
+            }
 
             let content = fs::read_to_string(&distro.default_grub_path).unwrap_or_default();
             let mut config = GrubDefaultConfig::parse_str(&content);
@@ -104,7 +124,14 @@ fn main() {
                 std::process::exit(1);
             }
 
-            println!("{{\"status\": \"success\", \"theme\": \"{}\", \"has_pf2_fonts\": {}}}", audit.name, audit.has_pf2_fonts);
+            // FIX Flaw 5: Use serde_json for safe JSON serialization instead of
+            // hand-crafted format strings that break on special characters in theme names.
+            let res = serde_json::json!({
+                "status": "success",
+                "theme": audit.name,
+                "has_pf2_fonts": audit.has_pf2_fonts
+            });
+            println!("{}", serde_json::to_string_pretty(&res).unwrap());
         }
         "regenerate" => {
             let cmd_parts = &distro.regen_command;
@@ -152,9 +179,23 @@ fn main() {
                 eprintln!("Error: restore-snapshot requires a timestamp ID");
                 std::process::exit(1);
             }
-            let ts: i64 = args[2].parse().unwrap_or(0);
+            // FIX Flaw 2: Return an explicit parse error instead of silently defaulting to 0,
+            // which would produce a misleading "Snapshot not found" error.
+            let ts: i64 = match args[2].parse() {
+                Ok(v) => v,
+                Err(_) => {
+                    eprintln!("Error: '{}' is not a valid snapshot timestamp ID. Expected a numeric value.", args[2]);
+                    std::process::exit(1);
+                }
+            };
             match snapshot_mgr.restore_snapshot(ts, &distro) {
-                Ok(_) => println!("{{\"status\": \"success\", \"message\": \"Restored snapshot successfully\"}}"),
+                Ok(_) => {
+                    let res = serde_json::json!({
+                        "status": "success",
+                        "message": "Restored snapshot successfully"
+                    });
+                    println!("{}", serde_json::to_string_pretty(&res).unwrap());
+                }
                 Err(e) => { eprintln!("Failed to restore snapshot: {}", e); std::process::exit(1); }
             }
         }
