@@ -4,6 +4,14 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { execSync } from 'node:child_process';
 
+const LOG_PREFIX = '[GrubEditor API]';
+function log(stage: string, ...args: any[]) {
+  console.log(`${LOG_PREFIX} [${stage}]`, ...args);
+}
+function logError(stage: string, ...args: any[]) {
+  console.error(`${LOG_PREFIX} [${stage}] ERROR:`, ...args);
+}
+
 const fileCache: Record<string, { time: number; content: string }> = {};
 
 function readProtectedFile(filepath: string, maxAgeMs = 15000): string {
@@ -151,6 +159,321 @@ function parseGrubCfg(content: string): BootEntry[] {
   return entries;
 }
 
+function getOverridesPath(): string {
+  if (fs.existsSync('/boot/grub2')) return '/boot/grub2/grub-editor-entries.json';
+  if (fs.existsSync('/boot/grub')) return '/boot/grub/grub-editor-entries.json';
+  const dir = path.join(os.homedir(), '.grubdeck');
+  if (!fs.existsSync(dir)) try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+  return path.join(dir, 'grub-editor-entries.json');
+}
+
+function writeProtectedFile(filepath: string, content: string): void {
+  try {
+    fs.writeFileSync(filepath, content, 'utf8');
+  } catch {
+    const tmpPath = path.join(os.tmpdir(), `grub-write-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`);
+    fs.writeFileSync(tmpPath, content, 'utf8');
+    try {
+      execSync(`sudo -n cp "${tmpPath}" "${filepath}" 2>/dev/null && rm -f "${tmpPath}"`, { stdio: 'ignore' });
+    } catch {
+      try {
+        execSync(`pkexec sh -c "cp '${tmpPath}' '${filepath}' && chmod 0644 '${filepath}'"`, { stdio: 'ignore' });
+      } catch (err: any) {
+        console.error(`Failed to write ${filepath} via pkexec:`, err);
+        throw new Error(`Cannot write to ${filepath}: permission denied or authentication dismissed.`);
+      } finally {
+        if (fs.existsSync(tmpPath)) try { fs.unlinkSync(tmpPath); } catch {}
+      }
+    }
+  }
+  delete fileCache[filepath];
+}
+
+function getSavedOverrides(): any[] {
+  try {
+    const p = getOverridesPath();
+    const content = readProtectedFile(p, 1000);
+    return JSON.parse(content);
+  } catch {
+    return [];
+  }
+}
+
+function mergeEntriesWithOverrides(systemEntries: any[], overrides: any[]): any[] {
+  log('MERGE', `Starting merge: ${systemEntries.length} system entries, ${overrides.length} overrides`);
+  if (!overrides || !Array.isArray(overrides) || overrides.length === 0) {
+    log('MERGE', 'No overrides found, returning raw system entries');
+    return systemEntries;
+  }
+  const sysMatched = new Set<number>();
+  systemEntries.forEach((entry) => {
+    if (!entry.originalTitle) entry.originalTitle = entry.title;
+  });
+
+  log('MERGE', 'System entries:', systemEntries.map((e, i) => `[${i}] id="${e.id}" title="${e.title}"`).join(' | '));
+  log('MERGE', 'Overrides:', overrides.map((o, i) => `[${i}] id="${o.id}" title="${o.title}" origTitle="${o.originalTitle}" deleted=${o.deleted}`).join(' | '));
+
+  const result: any[] = [];
+  overrides.forEach((ov, ovIdx) => {
+    // Strategy 1: Match by stable ID (skip synthetic IDs)
+    let matchIdx = systemEntries.findIndex((sys, idx) => !sysMatched.has(idx) && ov.id && sys.id === ov.id && !sys.id.startsWith('sys-entry-'));
+    let matchMethod = 'id';
+
+    // Strategy 2: Match by originalTitle against system title/originalTitle
+    if (matchIdx === -1) {
+      matchIdx = systemEntries.findIndex((sys, idx) => {
+        if (sysMatched.has(idx)) return false;
+        const sysOrig = sys.originalTitle || sys.title;
+        const ovOrig = ov.originalTitle || ov.title;
+        return ovOrig === sys.title || ovOrig === sysOrig || ov.title === sys.title;
+      });
+      matchMethod = 'title';
+    }
+
+    // Strategy 3: Positional fallback for synthetic IDs
+    if (matchIdx === -1 && ov.id && ov.id.startsWith('sys-entry-')) {
+      const pos = parseInt(ov.id.replace('sys-entry-', ''), 10);
+      if (!isNaN(pos) && pos < systemEntries.length && !sysMatched.has(pos)) {
+        matchIdx = pos;
+        matchMethod = 'positional';
+      }
+    }
+
+    if (matchIdx !== -1) {
+      sysMatched.add(matchIdx);
+      log('MERGE', `Override[${ovIdx}] "${ov.title}" matched system[${matchIdx}] "${systemEntries[matchIdx].title}" via ${matchMethod}`);
+    } else {
+      log('MERGE', `Override[${ovIdx}] "${ov.title}" (origTitle="${ov.originalTitle}", id="${ov.id}") had NO match in system entries`);
+    }
+
+    if (ov.deleted) {
+      const alreadyInResult = result.some(e => 
+        (ov.id && e.id === ov.id && !e.id.startsWith('sys-') && !ov.id.startsWith('sys-')) ||
+        ((ov.originalTitle || ov.title) === (e.originalTitle || e.title))
+      );
+      if (alreadyInResult) {
+        log('MERGE', `Override[${ovIdx}] "${ov.title}" is a DUPLICATE deleted override — skipping`);
+        return;
+      }
+      log('MERGE', `Override[${ovIdx}] "${ov.title}" is DELETED (${matchIdx !== -1 ? 'matched & suppressed system entry' : 'preserved deleted override from previous deploy'})`);
+      result.push({ ...ov, deleted: true, enabled: false });
+    } else if (matchIdx !== -1) {
+      const sys = systemEntries[matchIdx];
+      result.push({
+        ...sys,
+        title: ov.title !== undefined ? ov.title : sys.title,
+        originalTitle: ov.originalTitle || sys.originalTitle || sys.title,
+        enabled: ov.enabled !== undefined ? ov.enabled : sys.enabled,
+        deleted: false,
+        order: result.length,
+      });
+    } else {
+      result.push({ ...ov, deleted: false, order: result.length });
+    }
+  });
+
+  let unmatchedCount = 0;
+  systemEntries.forEach((sys, index) => {
+    if (!sysMatched.has(index)) {
+      unmatchedCount++;
+      log('MERGE', `System entry[${index}] "${sys.title}" was UNMATCHED — adding to result`);
+      result.push({
+        ...sys,
+        originalTitle: sys.originalTitle || sys.title,
+        order: result.length,
+      });
+    }
+  });
+  log('MERGE', `Merge complete: ${result.length} total entries (${unmatchedCount} unmatched system entries added)`);
+  return result;
+}
+
+function applyOverridesToGrubCfg(content: string, overrides: any[]): string {
+  if (!overrides || !Array.isArray(overrides) || overrides.length === 0) return content;
+
+  const lines = content.split('\n');
+  const outputLines: string[] = [];
+  const extractedBlocks: { id: string; title: string; lines: string[]; origIdx: number }[] = [];
+  let firstMenuIdx = -1;
+  
+  let i = 0;
+  let entryCount = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('submenu ') || trimmed.startsWith('submenu\t')) {
+      if (firstMenuIdx === -1) firstMenuIdx = outputLines.length;
+      i++;
+      continue;
+    }
+    if (trimmed === '}' && firstMenuIdx !== -1 && outputLines.length >= firstMenuIdx) {
+      i++;
+      continue;
+    }
+
+    if (trimmed.startsWith('menuentry ') || trimmed.startsWith('menuentry\t')) {
+      if (firstMenuIdx === -1) firstMenuIdx = outputLines.length;
+      let title = "Unknown Entry";
+      const titleMatch = trimmed.match(/^menuentry\s+(?:['"](.*?)['"]|(\S+))/);
+      if (titleMatch) title = titleMatch[1] || titleMatch[2] || title;
+
+      let id = `sys-entry-${entryCount}`;
+      const idMatch = trimmed.match(/(?:--id|\$menuentry_id_option)\s+(?:['"](.*?)['"]|(\S+))/);
+      if (idMatch) id = idMatch[1] || idMatch[2] || id;
+
+      const blockLines: string[] = [line];
+      let braceDepth = (line.match(/\{/g) || []).length - (line.match(/\}/g) || []).length;
+      let j = i + 1;
+      while (j < lines.length && (braceDepth > 0 || (braceDepth === 0 && !lines[j].includes('{')))) {
+        const bline = lines[j];
+        blockLines.push(bline);
+        braceDepth += (bline.match(/\{/g) || []).length - (bline.match(/\}/g) || []).length;
+        if (braceDepth <= 0 && bline.includes('}')) {
+          j++;
+          break;
+        }
+        j++;
+      }
+      extractedBlocks.push({ id, title, lines: blockLines, origIdx: entryCount });
+      entryCount++;
+      i = j;
+      continue;
+    }
+
+    outputLines.push(line);
+    i++;
+  }
+
+  if (firstMenuIdx === -1 || extractedBlocks.length === 0) return content;
+
+  const processedBlocks: { idx: number; text: string }[] = [];
+  const matchedOrigIndices = new Set<number>();
+
+  overrides.forEach((ov, ovIndex) => {
+    let matchIdx = extractedBlocks.findIndex((b, idx) => !matchedOrigIndices.has(idx) && ov.id && b.id === ov.id && !b.id.startsWith('sys-entry-'));
+    if (matchIdx === -1) {
+      matchIdx = extractedBlocks.findIndex((b, idx) => !matchedOrigIndices.has(idx) && (ov.originalTitle === b.title || ov.title === b.title));
+    }
+    if (matchIdx === -1 && ov.id && ov.id.startsWith('sys-entry-')) {
+      const pos = parseInt(ov.id.replace('sys-entry-', ''), 10);
+      if (!isNaN(pos) && !matchedOrigIndices.has(pos)) matchIdx = pos;
+    }
+
+    if (matchIdx !== -1) {
+      matchedOrigIndices.add(matchIdx);
+    }
+
+    if (ov.deleted || ov.enabled === false) return;
+
+    if (matchIdx !== -1) {
+      const block = extractedBlocks[matchIdx];
+      let firstLine = block.lines[0];
+      if (ov.title && ov.title !== block.title) {
+        firstLine = firstLine.replace(block.title, ov.title);
+        block.lines[0] = firstLine;
+      }
+      processedBlocks.push({ idx: ovIndex, text: block.lines.join('\n') });
+    }
+  });
+
+  extractedBlocks.forEach((block, idx) => {
+    if (!matchedOrigIndices.has(idx)) {
+      processedBlocks.push({ idx: processedBlocks.length + 1000, text: block.lines.join('\n') });
+    }
+  });
+
+  processedBlocks.sort((a, b) => a.idx - b.idx);
+  const finalMenuSection = processedBlocks.map(b => b.text).join('\n\n');
+  outputLines.splice(firstMenuIdx, 0, finalMenuSection);
+
+  return outputLines.join('\n');
+}
+
+function getSnapshotsDir(): string {
+  if (process.getuid && process.getuid() === 0) {
+    const p = '/var/lib/grub-editor/backups';
+    if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
+    return p;
+  }
+  if (fs.existsSync('/var/lib/grub-editor/backups')) {
+    return '/var/lib/grub-editor/backups';
+  }
+  const localDir = path.join(os.homedir(), '.local', 'share', 'grub-editor', 'backups');
+  if (!fs.existsSync(localDir)) {
+    try { fs.mkdirSync(localDir, { recursive: true }); } catch {}
+  }
+  return localDir;
+}
+
+function createServerSnapshot(description: string): any {
+  const baseDir = getSnapshotsDir();
+  const timestamp = Date.now();
+  const folderName = `snap_${timestamp}`;
+  const targetDir = path.join(baseDir, folderName);
+  
+  try {
+    if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+  } catch {
+    try {
+      execSync(`pkexec mkdir -p "${targetDir}" && pkexec chmod 755 "${targetDir}"`);
+    } catch (e) {
+      logError('SNAPSHOT', "Could not create snapshot dir:", e);
+      return null;
+    }
+  }
+
+  const grubDefaultPath = fs.existsSync('/etc/default/grub') ? '/etc/default/grub' : '/boot/grub/default';
+  const defaultGrubBackup = path.join(targetDir, 'default_grub.bak');
+  try {
+    const defaultContent = readProtectedFile(grubDefaultPath);
+    writeProtectedFile(defaultGrubBackup, defaultContent);
+  } catch (e) {
+    logError('SNAPSHOT', "Failed to backup default grub:", e);
+  }
+
+  const grubCfgPath = fs.existsSync('/boot/grub2/grub.cfg') ? '/boot/grub2/grub.cfg' : '/boot/grub/grub.cfg';
+  let grubCfgBackup: string | null = null;
+  if (fs.existsSync(grubCfgPath)) {
+    const cfgBackupPath = path.join(targetDir, 'grub.cfg.bak');
+    try {
+      const cfgContent = readProtectedFile(grubCfgPath);
+      writeProtectedFile(cfgBackupPath, cfgContent);
+      grubCfgBackup = cfgBackupPath;
+    } catch (e) {
+      logError('SNAPSHOT', "Failed to backup grub.cfg:", e);
+    }
+  }
+
+  let blsEntriesBackup: string | null = null;
+  const overridesPath = getOverridesPath();
+  if (fs.existsSync(overridesPath)) {
+    const ovBackupPath = path.join(targetDir, 'grub-editor-entries.json.bak');
+    try {
+      const ovContent = readProtectedFile(overridesPath);
+      writeProtectedFile(ovBackupPath, ovContent);
+      blsEntriesBackup = ovBackupPath;
+    } catch (e) {}
+  }
+
+  const date_string = `${timestamp} (UTC Timestamp)`;
+  const snapshotData = {
+    timestamp,
+    date_string,
+    description: description || "Auto-backup",
+    default_grub_backup: defaultGrubBackup,
+    grub_cfg_backup: grubCfgBackup,
+    bls_entries_backup: blsEntriesBackup,
+    warnings: []
+  };
+
+  const metaFile = path.join(targetDir, 'snapshot_metadata.json');
+  writeProtectedFile(metaFile, JSON.stringify(snapshotData, null, 2));
+  log('SNAPSHOT', `Created recovery snapshot in ${targetDir}: "${description}"`);
+  return snapshotData;
+}
+
 export function grubApiPlugin(): Plugin {
   return {
     name: 'grub-editor-live-system-api',
@@ -167,10 +490,12 @@ export function grubApiPlugin(): Plugin {
           const pathname = url.pathname;
 
           if (req.method === 'GET' && pathname === '/api/boot-entries') {
+            log('GET /api/boot-entries', 'Fetching boot entries...');
             if (fs.existsSync('/boot/loader/entries')) {
               try {
                 const files = fs.readdirSync('/boot/loader/entries').filter(f => f.endsWith('.conf') || f.endsWith('.mgnix'));
                 if (files.length > 0) {
+                  log('GET /api/boot-entries', `Found ${files.length} BLS entry files`);
                   const blsEntries: BootEntry[] = [];
                   const activeKernel = os.release().trim();
                   files.sort().forEach((file, idx) => {
@@ -198,18 +523,28 @@ export function grubApiPlugin(): Plugin {
                       is_default: idx === 0,
                     });
                   });
-                  res.end(JSON.stringify(blsEntries));
-                  return;
+                    const overrides = getSavedOverrides();
+                    log('GET /api/boot-entries', `Loaded ${overrides.length} saved overrides from ${getOverridesPath()}`);
+                    const merged = mergeEntriesWithOverrides(blsEntries, overrides);
+                    log('GET /api/boot-entries', `Returning ${merged.length} entries (active: ${merged.filter((e: any) => !e.deleted).length}, deleted: ${merged.filter((e: any) => e.deleted).length})`);
+                    res.end(JSON.stringify(merged));
+                    return;
                 }
               } catch (e) {
-                console.warn("BLS directory read error, falling back to grub.cfg:", e);
+                logError('GET /api/boot-entries', 'BLS directory read error, falling back to grub.cfg:', e);
               }
             }
 
             const grubCfgPath = fs.existsSync('/boot/grub2/grub.cfg') ? '/boot/grub2/grub.cfg' : '/boot/grub/grub.cfg';
+            log('GET /api/boot-entries', `Reading grub.cfg from ${grubCfgPath}`);
             const content = readProtectedFile(grubCfgPath);
             const entries = parseGrubCfg(content);
-            res.end(JSON.stringify(entries));
+            log('GET /api/boot-entries', `Parsed ${entries.length} menuentry blocks from grub.cfg`);
+            const overrides = getSavedOverrides();
+            log('GET /api/boot-entries', `Loaded ${overrides.length} saved overrides from ${getOverridesPath()}`);
+            const merged = mergeEntriesWithOverrides(entries, overrides);
+            log('GET /api/boot-entries', `Returning ${merged.length} entries (active: ${merged.filter((e: any) => !e.deleted).length}, deleted: ${merged.filter((e: any) => e.deleted).length})`);
+            res.end(JSON.stringify(merged));
             return;
           }
 
@@ -323,18 +658,28 @@ export function grubApiPlugin(): Plugin {
           }
 
           if (req.method === 'GET' && pathname === '/api/snapshots') {
-            const home = os.homedir();
-            const snapDir = path.join(home, '.grubdeck', 'snapshots');
+            log('GET /api/snapshots', 'Fetching recovery snapshots...');
+            const snapDir = getSnapshotsDir();
             const snapshots: any[] = [];
             if (fs.existsSync(snapDir)) {
               try {
-                const files = fs.readdirSync(snapDir).filter(f => f.endsWith('.json'));
-                for (const file of files) {
-                  const data = JSON.parse(fs.readFileSync(path.join(snapDir, file), 'utf8'));
-                  snapshots.push(data);
+                const subdirs = fs.readdirSync(snapDir);
+                for (const folder of subdirs) {
+                  const metaPath = path.join(snapDir, folder, 'snapshot_metadata.json');
+                  if (fs.existsSync(metaPath)) {
+                    try {
+                      const content = readProtectedFile(metaPath);
+                      const data = JSON.parse(content);
+                      snapshots.push(data);
+                    } catch (err) {}
+                  }
                 }
-              } catch {}
+                snapshots.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+              } catch (e) {
+                logError('GET /api/snapshots', 'Failed reading snapshot directories:', e);
+              }
             }
+            log('GET /api/snapshots', `Returning ${snapshots.length} snapshots`);
             res.end(JSON.stringify(snapshots));
             return;
           }
@@ -346,7 +691,11 @@ export function grubApiPlugin(): Plugin {
               try {
                 const data = body ? JSON.parse(body) : {};
                 if (pathname === '/api/save-grub-config') {
-                  const { newConfig } = data;
+                  const { newConfig, reason, createSnapshot } = data;
+                  log('POST /api/save-grub-config', `Saving config (createSnapshot=${createSnapshot}, reason="${reason}")`);
+                  if (createSnapshot) {
+                    createServerSnapshot(reason || "Modified GRUB general configuration");
+                  }
                   if (newConfig) {
                     const lines: string[] = ["# Updated via GrubEditor GUI"];
                     for (const [k, v] of Object.entries(newConfig)) {
@@ -372,23 +721,97 @@ export function grubApiPlugin(): Plugin {
                 }
 
                 if (pathname === '/api/save-boot-entries') {
+                  const { newEntries, reason, createSnapshot } = data;
+                  log('POST /api/save-boot-entries', `Received ${newEntries?.length ?? 0} entries to save (createSnapshot=${createSnapshot}, reason="${reason}")`);
+                  if (createSnapshot) {
+                    createServerSnapshot(reason || "Modified boot menu entries & ordering");
+                  }
+                  if (newEntries && Array.isArray(newEntries)) {
+                    const toSave = newEntries.map((e: any) => ({ ...e, originalTitle: e.originalTitle || e.title }));
+                    const deletedCount = toSave.filter((e: any) => e.deleted).length;
+                    const activeCount = toSave.filter((e: any) => !e.deleted).length;
+                    log('POST /api/save-boot-entries', `Saving ${toSave.length} entries (${activeCount} active, ${deletedCount} deleted) to ${getOverridesPath()}`);
+                    toSave.forEach((e: any, i: number) => {
+                      log('POST /api/save-boot-entries', `  [${i}] id="${e.id}" title="${e.title}" origTitle="${e.originalTitle}" deleted=${e.deleted} enabled=${e.enabled}`);
+                    });
+                    writeProtectedFile(getOverridesPath(), JSON.stringify(toSave, null, 2));
+                    log('POST /api/save-boot-entries', 'Write successful');
+                  }
                   delete fileCache['/boot/grub/grub.cfg'];
                   delete fileCache['/boot/grub2/grub.cfg'];
                   res.end(JSON.stringify({ success: true }));
                   return;
                 }
 
+                if (pathname === '/api/restore-snapshot') {
+                  const { timestamp } = data;
+                  log('POST /api/restore-snapshot', `Restoring snapshot timestamp ${timestamp}...`);
+                  const snapDir = getSnapshotsDir();
+                  const targetDir = path.join(snapDir, `snap_${timestamp}`);
+                  const metaPath = path.join(targetDir, 'snapshot_metadata.json');
+                  if (!fs.existsSync(metaPath)) {
+                    throw new Error('Snapshot metadata not found for timestamp ' + timestamp);
+                  }
+                  const snapData = JSON.parse(readProtectedFile(metaPath));
+
+                  createServerSnapshot(`Auto-backup before restoring snapshot from ${new Date(timestamp).toLocaleString()}`);
+
+                  if (snapData.default_grub_backup && fs.existsSync(snapData.default_grub_backup)) {
+                    const defTarget = fs.existsSync('/etc/default/grub') ? '/etc/default/grub' : '/boot/grub/default';
+                    writeProtectedFile(defTarget, readProtectedFile(snapData.default_grub_backup));
+                    delete fileCache['/etc/default/grub'];
+                    delete fileCache['/boot/grub/default'];
+                  }
+                  if (snapData.grub_cfg_backup && fs.existsSync(snapData.grub_cfg_backup)) {
+                    const cfgTarget = fs.existsSync('/boot/grub2/grub.cfg') ? '/boot/grub2/grub.cfg' : '/boot/grub/grub.cfg';
+                    writeProtectedFile(cfgTarget, readProtectedFile(snapData.grub_cfg_backup));
+                    delete fileCache['/boot/grub/grub.cfg'];
+                    delete fileCache['/boot/grub2/grub.cfg'];
+                  }
+                  if (snapData.bls_entries_backup && fs.existsSync(snapData.bls_entries_backup)) {
+                    writeProtectedFile(getOverridesPath(), readProtectedFile(snapData.bls_entries_backup));
+                  }
+                  log('POST /api/restore-snapshot', 'Restore completed successfully');
+                  res.end(JSON.stringify({ success: true }));
+                  return;
+                }
+
                 if (pathname === '/api/trigger-regen') {
+                  log('POST /api/trigger-regen', 'Starting GRUB regeneration...');
                   let output = "";
                   try {
                     const isRoot = process.getuid ? process.getuid() === 0 : false;
                     const cmd = isRoot ? 'update-grub 2>&1' : 'pkexec update-grub 2>&1';
+                    log('POST /api/trigger-regen', `Running: ${cmd} (isRoot=${isRoot})`);
                     output = execSync(cmd, { encoding: 'utf8' });
+                    log('POST /api/trigger-regen', 'update-grub completed successfully');
                     delete fileCache['/boot/grub/grub.cfg'];
                     delete fileCache['/boot/grub2/grub.cfg'];
+
+                    try {
+                      const grubCfgPath = fs.existsSync('/boot/grub2/grub.cfg') ? '/boot/grub2/grub.cfg' : '/boot/grub/grub.cfg';
+                      if (fs.existsSync(grubCfgPath)) {
+                        const content = readProtectedFile(grubCfgPath);
+                        const overrides = getSavedOverrides();
+                        log('POST /api/trigger-regen', `Post-regen: ${overrides.length} overrides to apply to ${grubCfgPath}`);
+                        if (overrides.length > 0) {
+                          const deletedOverrides = overrides.filter((o: any) => o.deleted);
+                          log('POST /api/trigger-regen', `Overrides breakdown: ${overrides.length - deletedOverrides.length} active, ${deletedOverrides.length} deleted`);
+                          const updated = applyOverridesToGrubCfg(content, overrides);
+                          writeProtectedFile(grubCfgPath, updated);
+                          log('POST /api/trigger-regen', 'Successfully wrote modified grub.cfg');
+                          output += "\n[GrubEditor] Applied custom menu ordering, titles, and exclusions to grub.cfg successfully.";
+                        }
+                      }
+                    } catch (errPost: any) {
+                      logError('POST /api/trigger-regen', 'Failed to apply post-regeneration overrides:', errPost);
+                      output += `\n[GrubEditor] Warning: Could not apply overrides to grub.cfg: ${errPost.message}`;
+                    }
                   } catch (e: any) {
+                    logError('POST /api/trigger-regen', 'update-grub failed:', e.message);
                     output = e.stdout || e.stderr || `Failed: ${e.message}`;
                   }
+                  log('POST /api/trigger-regen', 'Regeneration pipeline complete');
                   res.end(JSON.stringify({ success: true, output }));
                   return;
                 }

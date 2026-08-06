@@ -50,13 +50,24 @@ export default function App() {
     setShowModal(true);
     setRegenOutput(null);
     const snapTitle = customSnapshotName || "Manual configuration modification";
+    console.log('[GrubEditor Deploy] Starting deploy pipeline...');
+    console.log(`[GrubEditor Deploy] Snapshot title: "${snapTitle}"`);
+    console.log(`[GrubEditor Deploy] Boot entries to save: ${bootEntries.length}`);
+    bootEntries.forEach((e, i) => {
+      console.log(`[GrubEditor Deploy]   [${i}] id="${e.id}" title="${e.title}" origTitle="${(e as any).originalTitle}" deleted=${e.deleted} enabled=${e.enabled}`);
+    });
     try {
+      console.log('[GrubEditor Deploy] Step 1: Saving GRUB config...');
       await ApiService.saveGrubConfig(config, snapTitle, true);
+      console.log('[GrubEditor Deploy] Step 2: Saving boot entries...');
       await ApiService.saveBootEntries(bootEntries, "User deployed boot menu option modifications via GrubEditor GUI", false);
+      console.log('[GrubEditor Deploy] Step 3: Triggering regeneration...');
       const result = await ApiService.triggerRegen();
+      console.log('[GrubEditor Deploy] Deploy complete. Regen output:', result.output?.substring(0, 200));
       setRegenOutput(result.output);
       setHasPendingChanges(false);
     } catch (e: any) {
+      console.error('[GrubEditor Deploy] Deploy FAILED:', e);
       setRegenOutput(`Error applying configuration: ${e.message}`);
     } finally {
       setIsApplying(false);

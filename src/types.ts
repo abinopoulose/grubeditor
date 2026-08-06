@@ -46,11 +46,13 @@ export interface Snapshot {
   bls_entries_backup?: string;
   config_snapshot?: Record<string, string>;
   entries_snapshot?: BootEntry[];
+  warnings?: string[];
 }
 
 export interface BootEntry {
   title: string;
   id?: string;
+  originalTitle?: string;
   version?: string;
   options?: string;
   enabled?: boolean;
@@ -58,4 +60,15 @@ export interface BootEntry {
   isCurrent?: boolean;
   type?: 'linux' | 'windows' | 'recovery' | 'efi' | 'custom';
   isCustom?: boolean;
+  order?: number;
+}
+
+export interface BlsEntry {
+  filepath: string;
+  title: string;
+  version: string;
+  linux: string;
+  initrd: string[];
+  options: string;
+  id?: string;
 }

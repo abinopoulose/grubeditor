@@ -216,44 +216,60 @@ export const ApiService = {
   },
 
   async getBootEntries(): Promise<BootEntry[]> {
+    console.log('[GrubEditor UI] getBootEntries: fetching...');
     if (isTauri) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
         const entries = await invoke<BootEntry[]>('get_boot_entries');
+        console.log(`[GrubEditor UI] getBootEntries: got ${entries.length} entries from Tauri`);
         return entries.map((e, index) => ({ ...e, id: e.id || `sys-target-${index}` }));
       } catch (err) {
-        console.error("Failed to load native boot entries, falling back to mock:", err);
+        console.error('[GrubEditor UI] getBootEntries: Tauri invoke failed, falling back:', err);
       }
     }
     try {
       const res = await fetch('/api/boot-entries');
       if (res.ok) {
         const entries: BootEntry[] = await res.json();
+        const active = entries.filter(e => !e.deleted);
+        const deleted = entries.filter(e => e.deleted);
+        console.log(`[GrubEditor UI] getBootEntries: got ${entries.length} entries from Vite API (${active.length} active, ${deleted.length} deleted)`);
+        entries.forEach((e, i) => {
+          console.log(`[GrubEditor UI]   [${i}] id="${e.id}" title="${e.title}" origTitle="${(e as any).originalTitle}" deleted=${e.deleted} enabled=${e.enabled}`);
+        });
         return entries.map((e, index) => ({ ...e, id: e.id || `sys-target-${index}` }));
       }
     } catch (e) {
-      console.warn("Could not fetch system boot entries via Vite API:", e);
+      console.warn('[GrubEditor UI] getBootEntries: Vite API not reachable, using mock:', e);
     }
     return mockBootEntries.map((e, index) => ({ ...e, id: e.id || `sys-target-${index}` }));
   },
 
   async saveBootEntries(newEntries: BootEntry[], reason = "Modified boot menu entries & ordering in Boot Menu Options", createSnapshot = true): Promise<boolean> {
+    console.log(`[GrubEditor UI] saveBootEntries: saving ${newEntries.length} entries`);
+    newEntries.forEach((e, i) => {
+      console.log(`[GrubEditor UI]   [${i}] id="${e.id}" title="${e.title}" origTitle="${(e as any).originalTitle}" deleted=${e.deleted} enabled=${e.enabled}`);
+    });
     if (isTauri) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
         await invoke('save_boot_entries', { newEntries, reason, createSnapshot });
+        console.log('[GrubEditor UI] saveBootEntries: Tauri save successful');
       } catch (err) {
-        console.error("Failed to save native boot entries:", err);
+        console.error('[GrubEditor UI] saveBootEntries: Tauri save failed:', err);
         throw err;
       }
     } else {
       try {
-        await fetch('/api/save-boot-entries', {
+        const res = await fetch('/api/save-boot-entries', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ newEntries, reason, createSnapshot })
         });
-      } catch (e) {}
+        console.log(`[GrubEditor UI] saveBootEntries: Vite API response status=${res.status}`);
+      } catch (e) {
+        console.error('[GrubEditor UI] saveBootEntries: Vite API save failed:', e);
+      }
     }
     mockBootEntries = [...newEntries];
     if (createSnapshot) {
@@ -302,12 +318,19 @@ export const ApiService = {
     }
     try {
       const res = await fetch('/api/snapshots');
-      if (res.ok) return await res.json();
-    } catch (e) {}
+      if (res.ok) {
+        const data = await res.json();
+        console.log(`[GrubEditor UI] Loaded ${data.length} snapshots from server`);
+        return data;
+      }
+    } catch (e) {
+      console.warn('[GrubEditor UI] Failed to load server snapshots:', e);
+    }
     return [...mockSnapshots];
   },
 
   async restoreSnapshot(timestamp: number): Promise<boolean> {
+    console.log(`[GrubEditor UI] Restoring snapshot: timestamp=${timestamp}`);
     if (isTauri) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
@@ -318,12 +341,18 @@ export const ApiService = {
       }
     }
     try {
-      await fetch('/api/restore-snapshot', {
+      const res = await fetch('/api/restore-snapshot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ timestamp })
       });
-    } catch (e) {}
+      if (res.ok) {
+        console.log('[GrubEditor UI] Snapshot restore successful via Vite server');
+        return true;
+      }
+    } catch (e) {
+      console.warn('[GrubEditor UI] Failed to restore via server API:', e);
+    }
     const found = mockSnapshots.find(s => s.timestamp === timestamp);
     if (!found) throw new Error("Snapshot timestamp ID not found");
     if (found.config_snapshot) mockConfig = { ...found.config_snapshot };

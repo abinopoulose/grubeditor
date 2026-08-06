@@ -37,6 +37,7 @@ export const BootMenuManager: React.FC<BootMenuManagerProps> = ({ entries, onCha
     const fromOrigIdx = activeEntries[activeIdx].originalIdx;
     const toOrigIdx = activeEntries[targetActiveIdx].originalIdx;
 
+    console.log(`[GrubEditor BootMenu] MOVE: "${entries[fromOrigIdx].title}" ${direction} (swap positions ${fromOrigIdx} <-> ${toOrigIdx})`);
     const updated = [...entries];
     const temp = updated[fromOrigIdx];
     updated[fromOrigIdx] = updated[toOrigIdx];
@@ -52,19 +53,17 @@ export const BootMenuManager: React.FC<BootMenuManagerProps> = ({ entries, onCha
 
   const handleDeleteEntry = (originalIdx: number) => {
     if (entries[originalIdx]?.isCurrent) return;
+    console.log(`[GrubEditor BootMenu] DELETE: "${entries[originalIdx].title}" (id="${entries[originalIdx].id}", origTitle="${(entries[originalIdx] as any).originalTitle}")`);
     const updated = [...entries];
     updated[originalIdx] = { ...updated[originalIdx], deleted: true, enabled: false };
     onChange(updated);
   };
 
   const handleRestoreEntry = (originalIdx: number) => {
+    console.log(`[GrubEditor BootMenu] RESTORE: "${entries[originalIdx].title}" (id="${entries[originalIdx].id}")`);
     const updated = [...entries];
     updated[originalIdx] = { ...updated[originalIdx], deleted: false, enabled: true };
     onChange(updated);
-  };
-
-  const handlePurgeEntry = (originalIdx: number) => {
-    onChange(entries.filter((_, idx) => idx !== originalIdx));
   };
 
   const getIcon = (entry: BootEntry, isSelected = false) => {
@@ -227,14 +226,6 @@ export const BootMenuManager: React.FC<BootMenuManagerProps> = ({ entries, onCha
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                       <span>Restore</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handlePurgeEntry(originalIdx)}
-                      className="p-2.5 rounded-xl bg-slate-900 text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 border border-white/[0.06] transition-all cursor-pointer"
-                      title="Delete permanently"
-                    >
-                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </motion.div>

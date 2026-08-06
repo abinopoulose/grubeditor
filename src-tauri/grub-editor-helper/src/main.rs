@@ -31,6 +31,34 @@ fn main() {
                 }
             }
         }
+        "write-boot-entries" => {
+            if args.len() < 3 {
+                eprintln!("Error: write-boot-entries requires a JSON payload");
+                std::process::exit(1);
+            }
+            let entries: Vec<grub_editor_core::menu_entries::BootEntry> = match serde_json::from_str(&args[2]) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("Failed to parse JSON payload: {}", e);
+                    std::process::exit(1);
+                }
+            };
+            let path = MenuEntryParser::get_overrides_path(&distro);
+            let payload = serde_json::to_string_pretty(&entries).unwrap();
+            match fs::write(&path, payload) {
+                Ok(_) => {
+                    let res = serde_json::json!({
+                        "status": "success",
+                        "message": format!("Successfully saved boot overrides to {:?}", path)
+                    });
+                    println!("{}", serde_json::to_string_pretty(&res).unwrap());
+                }
+                Err(e) => {
+                    eprintln!("Failed to write to {:?}: {}", path, e);
+                    std::process::exit(1);
+                }
+            }
+        }
         "read-config" => {
             let path = &distro.default_grub_path;
             let content = fs::read_to_string(path).unwrap_or_else(|_| "# Default GRUB not readable\nGRUB_DEFAULT=0\nGRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX_DEFAULT=\"quiet splash\"\n".to_string());
@@ -146,9 +174,18 @@ fn main() {
             }
             match cmd.output() {
                 Ok(output) => {
-                    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                    let mut stdout = String::from_utf8_lossy(&output.stdout).to_string();
                     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
                     let success = output.status.success();
+                    if success {
+                        let overrides = MenuEntryParser::load_overrides(&distro);
+                        if !overrides.is_empty() {
+                            let cfg_path = std::path::Path::new(&distro.grub_cfg_path);
+                            if let Ok(_) = MenuEntryParser::apply_overrides_to_grub_cfg(cfg_path, &overrides) {
+                                stdout.push_str("\n[GrubEditor Helper] Successfully applied custom menu overrides to grub.cfg.");
+                            }
+                        }
+                    }
                     let res = serde_json::json!({
                         "success": success,
                         "command": cmd_parts.join(" "),

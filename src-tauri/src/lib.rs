@@ -117,8 +117,9 @@ async fn get_boot_entries() -> Result<Vec<BootEntry>, String> {
 }
 
 #[tauri::command]
-async fn save_boot_entries(_new_entries: Vec<BootEntry>, _reason: Option<String>, _create_snapshot: Option<bool>) -> Result<bool, String> {
-    // Currently preserving boot entries snapshot and returning success
+async fn save_boot_entries(new_entries: Vec<BootEntry>, _reason: Option<String>, _create_snapshot: Option<bool>) -> Result<bool, String> {
+    let payload = serde_json::to_string(&new_entries).map_err(|e| e.to_string())?;
+    run_helper(&["write-boot-entries", &payload], true)?;
     Ok(true)
 }
 
