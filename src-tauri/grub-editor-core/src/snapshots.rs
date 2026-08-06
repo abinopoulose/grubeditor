@@ -11,6 +11,9 @@ pub struct Snapshot {
     pub default_grub_backup: PathBuf,
     pub grub_cfg_backup: Option<PathBuf>,
     pub bls_entries_backup: Option<PathBuf>,
+    /// Tracks non-fatal warnings that occurred during snapshot creation
+    #[serde(default)]
+    pub warnings: Vec<String>,
 }
 
 pub struct SnapshotManager {
@@ -54,32 +57,72 @@ impl SnapshotManager {
     }
 
     pub fn create_snapshot(&self, description: &str, distro: &crate::distro::BootloaderConfig) -> anyhow::Result<Snapshot> {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
-        let folder_name = format!("snap_{}", now);
-        let target_dir = self.storage_dir.join(folder_name);
+        // FIX Flaw 4: Refuse to create a snapshot if the source config file doesn't exist,
+        // since the resulting snapshot would be empty/corrupt and mislead the user on restore.
+        if !distro.default_grub_path.exists() {
+            return Err(anyhow::anyhow!(
+                "Cannot create snapshot: source config file {:?} does not exist. \
+                 An empty snapshot would be useless for recovery.",
+                distro.default_grub_path
+            ));
+        }
+
+        // FIX Flaw 1: Use millisecond-precision timestamps and a collision-retry loop
+        // to prevent two snapshots created in rapid succession from silently overwriting each other.
+        let mut now_ms = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as i64;
+        let mut folder_name = format!("snap_{}", now_ms);
+        let mut target_dir = self.storage_dir.join(&folder_name);
+
+        // Collision retry: if the directory already exists, increment until unique
+        let mut retries = 0;
+        while target_dir.exists() && retries < 100 {
+            now_ms += 1;
+            folder_name = format!("snap_{}", now_ms);
+            target_dir = self.storage_dir.join(&folder_name);
+            retries += 1;
+        }
+        if target_dir.exists() {
+            return Err(anyhow::anyhow!(
+                "Failed to create unique snapshot directory after {} retries", retries
+            ));
+        }
+
         fs::create_dir_all(&target_dir)?;
 
         let default_grub_backup = target_dir.join("default_grub.bak");
-        if distro.default_grub_path.exists() {
-            fs::copy(&distro.default_grub_path, &default_grub_backup)?;
-        }
+        fs::copy(&distro.default_grub_path, &default_grub_backup)?;
 
+        let mut warnings = Vec::new();
+
+        // FIX Flaw 8: Don't silently discard grub.cfg copy errors — record them as warnings
         let grub_cfg_backup = if distro.grub_cfg_path.exists() {
             let p = target_dir.join("grub.cfg.bak");
-            let _ = fs::copy(&distro.grub_cfg_path, &p);
-            Some(p)
+            match fs::copy(&distro.grub_cfg_path, &p) {
+                Ok(_) => Some(p),
+                Err(e) => {
+                    let msg = format!(
+                        "Warning: Failed to back up grub.cfg from {:?}: {}. \
+                         Only /etc/default/grub was archived.",
+                        distro.grub_cfg_path, e
+                    );
+                    eprintln!("{}", msg);
+                    warnings.push(msg);
+                    None
+                }
+            }
         } else {
             None
         };
 
-        let date_string = format!("{} (UTC Timestamp)", now);
+        let date_string = format!("{} (UTC Timestamp)", now_ms);
         let snap = Snapshot {
-            timestamp: now,
+            timestamp: now_ms,
             date_string,
             description: description.to_string(),
             default_grub_backup,
             grub_cfg_backup,
             bls_entries_backup: None,
+            warnings,
         };
 
         let meta_file = target_dir.join("snapshot_metadata.json");
@@ -100,8 +143,23 @@ impl SnapshotManager {
         let content = fs::read_to_string(&meta_file)?;
         let snap: Snapshot = serde_json::from_str(&content)?;
 
+        // FIX Flaw 3: Create a safety backup of the CURRENT configuration before restoring,
+        // so the user can undo an accidental restore. This is critical for a recovery system.
+        if let Err(e) = self.create_snapshot(
+            &format!("Auto-backup before restoring snapshot from {}", snap.date_string),
+            distro
+        ) {
+            eprintln!("Warning: Failed to create pre-restore backup: {}", e);
+            // Continue with restore even if backup fails — the user explicitly requested it
+        }
+
         if snap.default_grub_backup.exists() {
             fs::copy(&snap.default_grub_backup, &distro.default_grub_path)?;
+        } else {
+            return Err(anyhow::anyhow!(
+                "Snapshot backup file {:?} is missing from disk. Cannot restore.",
+                snap.default_grub_backup
+            ));
         }
 
         if let Some(cfg_bak) = snap.grub_cfg_backup {
@@ -115,9 +173,12 @@ impl SnapshotManager {
 }
 
 fn rust_running_as_root() -> bool {
+    // FIX Flaw 7: Use the actual effective UID from the kernel instead of the
+    // easily spoofable $USER environment variable. geteuid() is the standard
+    // POSIX way to check if a process has root privileges.
     #[cfg(unix)]
     {
-        std::env::var("USER").map_or(false, |u| u == "root") || std::env::var("SUDO_USER").is_ok()
+        unsafe { libc::geteuid() == 0 }
     }
     #[cfg(not(unix))]
     {

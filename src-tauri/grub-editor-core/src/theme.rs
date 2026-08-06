@@ -105,7 +105,14 @@ impl ThemeValidator {
             }
         }
 
-        let is_valid = validation_errors.is_empty() || (validation_errors.len() == 1 && !has_pf2_fonts);
+        // FIX Flaw 10: Explicitly separate hard validation errors from soft warnings.
+        // The old logic `errors.len() == 1 && !has_pf2_fonts` was fragile and would break
+        // if any new validation check was ever added. Missing .pf2 fonts is a warning,
+        // not a hard error — GRUB can still render the theme with fallback fonts.
+        let hard_error_count = validation_errors.iter().filter(|e| {
+            !e.starts_with("Warning:")
+        }).count();
+        let is_valid = hard_error_count == 0;
 
         Ok(ThemeMetadata {
             name,
