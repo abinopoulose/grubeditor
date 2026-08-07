@@ -10,6 +10,7 @@ Terminal=false
 Categories=Settings;HardwareSettings;
 Keywords=grub;bootloader;uefi;theme;linux;kernel;dual-boot;recovery;
 StartupNotify=true
+StartupWMClass=grub-editor
 Actions=Snapshots;
 
 [Desktop Action Snapshots]
