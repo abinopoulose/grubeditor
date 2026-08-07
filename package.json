@@ -7,11 +7,30 @@
     "url": "https://github.com/abinopoulose/Grub-Editor.git"
   },
   "type": "module",
+  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
+    "dev:electron": "vite",
     "build": "tsc && vite build",
+    "build:electron": "tsc && vite build && electron-builder --linux",
     "preview": "vite preview",
     "tauri": "tauri"
+  },
+  "build": {
+    "appId": "io.grubeditor.studio",
+    "productName": "GrubEditor",
+    "directories": {
+      "output": "release"
+    },
+    "linux": {
+      "icon": "public/app_logo.png",
+      "target": [
+        "deb",
+        "AppImage",
+        "dir"
+      ],
+      "category": "Settings"
+    }
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.23",
@@ -31,11 +50,15 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
+    "@types/node": "^26.1.2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.3",
     "playwright": "^1.62.1",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vite-plugin-electron": "^1.1.1"
   }
 }
