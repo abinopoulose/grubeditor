@@ -14,7 +14,7 @@
 You can install and integrate GrubEditor into your Ubuntu or Debian desktop using a single terminal command:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/abinopoulose/grubeditor/dev/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/abinopoulose/grubeditor/refs/heads/dev/install.sh | sudo bash
 ```
 *(Or if you have cloned this repository locally, run: `sudo ./install.sh`)*
 
@@ -22,7 +22,7 @@ Once complete, open your **GNOME / Ubuntu Application Overview** and search for 
 
 To uninstall completely at any time, run:
 ```bash
-curl -sSL https://raw.githubusercontent.com/abinopoulose/grubeditor/dev/uninstall.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/abinopoulose/grubeditor/refs/heads/dev/uninstall.sh | sudo bash
 ```
 
 ---

@@ -3,7 +3,7 @@ set -e
 
 if [ "$EUID" -ne 0 ]; then
     echo "Please run as root. You can run this command directly:"
-    echo "sudo curl -sSL https://raw.githubusercontent.com/abinopoulose/grubeditor/dev/install.sh | sudo bash"
+    echo "sudo curl -sSL https://raw.githubusercontent.com/abinopoulose/grubeditor/refs/heads/dev/install.sh | sudo bash"
     exit 1
 fi
 
