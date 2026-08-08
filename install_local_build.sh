@@ -11,13 +11,25 @@ cd "$SCRIPT_DIR"
 
 echo "Building GrubEditor locally..."
 
+# Ensure C compiler is installed for Rust
+if ! command -v cc &> /dev/null; then
+    echo "C compiler not found. Installing build-essential..."
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential
+fi
+
 # Drop root privileges for building steps
 if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
-    sudo -u "$SUDO_USER" bash -c '
+    sudo -u "$SUDO_USER" bash -c "
+        [ -f \"\$HOME/.bashrc\" ] && source \"\$HOME/.bashrc\" 2>/dev/null || true
+        [ -f \"\$HOME/.nvm/nvm.sh\" ] && source \"\$HOME/.nvm/nvm.sh\" 2>/dev/null
+        [ -f \"\$HOME/.cargo/env\" ] && source \"\$HOME/.cargo/env\" 2>/dev/null
+        export PATH=\"\$HOME/.local/bin:\$HOME/.cargo/bin:\$PATH\"
+        cd \"$SCRIPT_DIR\"
         npm ci
         cd src-tauri && cargo build --release -p grub-editor-helper && cd ..
         npm run build:electron -- -l dir
-    '
+    "
 else
     npm ci
     cd src-tauri && cargo build --release -p grub-editor-helper && cd ..
@@ -27,6 +39,9 @@ fi
 echo "Installing files..."
 rm -rf /opt/grubeditor
 cp -r release/linux-unpacked /opt/grubeditor
+
+mkdir -p /var/lib/grub-editor/backups
+chmod 755 /var/lib/grub-editor/backups
 
 install -m 0644 packaging/io.grubeditor.helper.policy "/usr/share/polkit-1/actions/io.grubeditor.helper.policy"
 install -m 0644 packaging/grubeditor.desktop "/usr/share/applications/grubeditor.desktop"

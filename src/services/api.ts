@@ -15,7 +15,7 @@ export function formatSnapshotDate(timestampOrDate: number | Date = Date.now()):
   hours = hours % 12;
   hours = hours ? hours : 12;
   const strHours = String(hours).padStart(2, '0');
-  return `${day}/${month}/${year} ${strHours}:${minutes}:${seconds} ${ampm}`;
+  return `${year}/${month}/${day} ${strHours}:${minutes}:${seconds} ${ampm}`;
 }
 
 export const ApiService = {
@@ -157,6 +157,24 @@ export const ApiService = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || "Failed to load server snapshots");
+    }
+    return await res.json();
+  },
+
+  async getSnapshotDetails(timestamp: number): Promise<{ config: Record<string, string>, bootEntries: BootEntry[] }> {
+    if (isTauri) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        return await invoke('get_snapshot_details', { timestamp });
+      } catch (err) {
+        console.error("Failed to fetch native snapshot details:", err);
+        throw err;
+      }
+    }
+    const res = await fetch(`/api/snapshot-details?timestamp=${timestamp}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to load snapshot details");
     }
     return await res.json();
   },

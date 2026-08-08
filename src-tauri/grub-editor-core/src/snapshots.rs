@@ -22,14 +22,10 @@ pub struct SnapshotManager {
 
 impl SnapshotManager {
     pub fn new() -> Self {
-        // Use system directory if elevated/root, otherwise fallback to local dev user config
-        let storage_dir = if rust_running_as_root() || Path::new("/var/lib/grub-editor/backups").exists() {
-            PathBuf::from("/var/lib/grub-editor/backups")
-        } else {
-            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-            PathBuf::from(home).join(".local/share/grub-editor/backups")
-        };
-        let _ = fs::create_dir_all(&storage_dir);
+        let storage_dir = PathBuf::from("/var/lib/grub-editor/backups");
+        if rust_running_as_root() {
+            let _ = fs::create_dir_all(&storage_dir);
+        }
         Self { storage_dir }
     }
 
@@ -169,6 +165,39 @@ impl SnapshotManager {
         }
 
         Ok(())
+    }
+
+    pub fn get_snapshot_details(&self, timestamp: i64) -> anyhow::Result<(crate::default_grub::GrubDefaultConfig, Vec<crate::menu_entries::BootEntry>)> {
+        let folder_name = format!("snap_{}", timestamp);
+        let target_dir = self.storage_dir.join(folder_name);
+        let meta_file = target_dir.join("snapshot_metadata.json");
+        
+        if !meta_file.exists() {
+            return Err(anyhow::anyhow!("Snapshot not found"));
+        }
+        
+        let content = fs::read_to_string(&meta_file)?;
+        let snap: Snapshot = serde_json::from_str(&content)?;
+
+        let config_str = if snap.default_grub_backup.exists() {
+            fs::read_to_string(&snap.default_grub_backup).unwrap_or_default()
+        } else {
+            String::new()
+        };
+        let config = crate::default_grub::GrubDefaultConfig::parse_str(&config_str);
+
+        let overrides = if let Some(bls_bak) = snap.bls_entries_backup {
+            if bls_bak.exists() {
+                let j = fs::read_to_string(&bls_bak).unwrap_or_default();
+                serde_json::from_str(&j).unwrap_or_default()
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        };
+
+        Ok((config, overrides))
     }
 }
 
