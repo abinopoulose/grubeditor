@@ -3,7 +3,7 @@
  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
 <policyconfig>
   <vendor>GrubEditor Team</vendor>
-  <vendor_url>https://github.com/abinopoulose/Grub-Editor</vendor_url>
+  <vendor_url>https://github.com/abinopoulose/grubeditor</vendor_url>
   <icon_name>utilities-system-monitor</icon_name>
   
   <action id="io.grubeditor.helper.exec">

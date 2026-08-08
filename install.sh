@@ -3,14 +3,14 @@ set -e
 
 if [ "$EUID" -ne 0 ]; then
     echo "Please run as root. You can run this command directly:"
-    echo "sudo curl -sSL https://raw.githubusercontent.com/abinopoulose/Grub-Editor/main/install.sh | sudo bash"
+    echo "sudo curl -sSL https://raw.githubusercontent.com/abinopoulose/grubeditor/dev/install.sh | sudo bash"
     exit 1
 fi
 
 echo "Installing GrubEditor..."
 
 # Determine latest release URL
-LATEST_RELEASE_URL="https://github.com/abinopoulose/Grub-Editor/releases/download/latest/grubeditor.tar.gz"
+LATEST_RELEASE_URL="https://github.com/abinopoulose/grubeditor/releases/download/latest/grubeditor.tar.gz"
 TMP_DIR=$(mktemp -d)
 
 echo "Downloading latest build from GitHub..."

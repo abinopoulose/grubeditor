@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/abinopoulose/Grub-Editor.git"
+    "url": "https://github.com/abinopoulose/grubeditor.git"
   },
   "type": "module",
   "main": "dist-electron/main.js",

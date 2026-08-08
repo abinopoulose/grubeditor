@@ -1,8 +1,8 @@
 # GrubEditor ⚡
 
-[![GitHub release](https://img.shields.io/github/v/release/abinopoulose/Grub-Editor?style=flat-square&color=06b6d4)](https://github.com/abinopoulose/Grub-Editor/releases)
+[![GitHub release](https://img.shields.io/github/v/release/abinopoulose/grubeditor?style=flat-square&color=06b6d4)](https://github.com/abinopoulose/grubeditor/releases)
 [![Wayland Native](https://img.shields.io/badge/Wayland-Native-10b981?style=flat-square)](https://wayland.freedesktop.org/)
-[![PolicyKit Secured](https://img.shields.io/badge/Polkit-Zero_Root_GUI-3b82f6?style=flat-square)](https://github.com/abinopoulose/Grub-Editor)
+[![PolicyKit Secured](https://img.shields.io/badge/Polkit-Zero_Root_GUI-3b82f6?style=flat-square)](https://github.com/abinopoulose/grubeditor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square)](https://opensource.org/licenses/MIT)
 
 **GrubEditor** is a modern, distribution-aware, and Wayland-safe Linux GRUB bootloader customization desktop application built with **Tauri v2 (Rust)** and **React + Tailwind CSS**. It eliminates legacy shell-script mangling, prevents boot failures with an automated theme verification engine, and guarantees system recoverability via atomic configuration snapshots.
@@ -14,7 +14,7 @@
 You can install and integrate GrubEditor into your Ubuntu or Debian desktop using a single terminal command:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/abinopoulose/Grub-Editor/master/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/abinopoulose/grubeditor/dev/install.sh | sudo bash
 ```
 *(Or if you have cloned this repository locally, run: `sudo ./install.sh`)*
 
@@ -22,7 +22,7 @@ Once complete, open your **GNOME / Ubuntu Application Overview** and search for 
 
 To uninstall completely at any time, run:
 ```bash
-sudo ./uninstall.sh
+curl -sSL https://raw.githubusercontent.com/abinopoulose/grubeditor/dev/uninstall.sh | sudo bash
 ```
 
 ---
@@ -47,8 +47,8 @@ To experience the interactive visual desktop experience immediately in your brow
 
 ```bash
 # Clone the repository
-git clone https://github.com/abinopoulose/Grub-Editor.git
-cd Grub-Editor
+git clone https://github.com/abinopoulose/grubeditor.git
+cd grubeditor
 
 # Launch simulated browser UI
 npm run dev
