@@ -13,9 +13,9 @@ fi
 
 echo "Reinstalling GrubEditor..."
 if [ "$EUID" -ne 0 ]; then
-    sudo ./install.sh
+    sudo ./install_local_build.sh
 else
-    ./install.sh
+    ./install_local_build.sh
 fi
 
 echo "GrubEditor reinstallation complete!"
