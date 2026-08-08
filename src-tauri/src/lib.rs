@@ -151,6 +151,27 @@ async fn get_snapshots() -> Result<Vec<Snapshot>, String> {
 }
 
 #[tauri::command]
+async fn get_snapshot_details(timestamp: i64) -> Result<serde_json::Value, String> {
+    let ts_str = timestamp.to_string();
+    let mgr = SnapshotManager::new();
+    mgr.get_snapshot_details(timestamp).map(|(config, boot_entries)| {
+        let mut config_map = HashMap::new();
+        for line in &config.lines {
+            if let ConfigLine::KeyValue { key, value, .. } = line {
+                config_map.insert(key.clone(), value.clone());
+            }
+        }
+        serde_json::json!({
+            "config": config_map,
+            "bootEntries": boot_entries
+        })
+    }).or_else(|_| {
+        let out = run_helper(&["get-snapshot-details", &ts_str], false)?;
+        serde_json::from_str(&out).map_err(|e| e.to_string())
+    }).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn restore_snapshot(timestamp: i64) -> Result<bool, String> {
     let ts_str = timestamp.to_string();
     run_helper(&["restore-snapshot", &ts_str], true)?;
@@ -178,6 +199,7 @@ pub fn run() {
             scan_themes,
             apply_theme,
             get_snapshots,
+            get_snapshot_details,
             restore_snapshot,
             trigger_regen
         ])

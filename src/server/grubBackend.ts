@@ -14,7 +14,7 @@ export function logError(stage: string, ...args: any[]) {
 
 const fileCache: Record<string, { time: number; content: string }> = {};
 
-export function readProtectedFile(filepath: string, maxAgeMs = 15000): string {
+export function readProtectedFile(filepath: string, maxAgeMs = 0): string {
   const now = Date.now();
   if (fileCache[filepath] && (now - fileCache[filepath].time) < maxAgeMs) {
     return fileCache[filepath].content;
@@ -22,7 +22,10 @@ export function readProtectedFile(filepath: string, maxAgeMs = 15000): string {
   let content = "";
   try {
     content = fs.readFileSync(filepath, 'utf8');
-  } catch {
+  } catch (e: any) {
+    if (e.code === 'ENOENT') {
+      throw new Error(`File not found: ${filepath}`);
+    }
     try {
       content = execSync(`sudo -n cat "${filepath}" 2>/dev/null`, { encoding: 'utf8' });
     } catch {
@@ -192,7 +195,7 @@ export function writeProtectedFile(filepath: string, content: string): void {
 export function getSavedOverrides(): any[] {
   try {
     const p = getOverridesPath();
-    const content = readProtectedFile(p, 1000);
+    const content = readProtectedFile(p, 0);
     return JSON.parse(content);
   } catch {
     return [];
@@ -389,19 +392,13 @@ export function applyOverridesToGrubCfg(content: string, overrides: any[]): stri
 }
 
 export function getSnapshotsDir(): string {
+  const p = '/var/lib/grub-editor/backups';
   if (process.getuid && process.getuid() === 0) {
-    const p = '/var/lib/grub-editor/backups';
-    if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
-    return p;
+    if (!fs.existsSync(p)) {
+      try { fs.mkdirSync(p, { recursive: true }); } catch {}
+    }
   }
-  if (fs.existsSync('/var/lib/grub-editor/backups')) {
-    return '/var/lib/grub-editor/backups';
-  }
-  const localDir = path.join(os.homedir(), '.local', 'share', 'grub-editor', 'backups');
-  if (!fs.existsSync(localDir)) {
-    try { fs.mkdirSync(localDir, { recursive: true }); } catch {}
-  }
-  return localDir;
+  return p;
 }
 
 export function createServerSnapshot(description: string): any {
@@ -674,6 +671,57 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
       }
       log('GET /api/snapshots', `Returning ${snapshots.length} snapshots`);
       res.end(JSON.stringify(snapshots));
+      return true;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/snapshot-details') {
+      const timestamp = url.searchParams.get('timestamp');
+      if (!timestamp) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: 'Missing timestamp' }));
+        return true;
+      }
+      
+      try {
+        const snapDir = getSnapshotsDir();
+        const targetDir = path.join(snapDir, `snap_${timestamp}`);
+        const metaPath = path.join(targetDir, 'snapshot_metadata.json');
+        
+        if (!fs.existsSync(metaPath)) {
+          throw new Error('Snapshot not found');
+        }
+        
+        const snapData = JSON.parse(readProtectedFile(metaPath));
+        
+        const config: Record<string, string> = {};
+        if (snapData.default_grub_backup && fs.existsSync(snapData.default_grub_backup)) {
+          const content = readProtectedFile(snapData.default_grub_backup);
+          content.split('\n').forEach(line => {
+            const trimmed = line.trim();
+            if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+              const idx = trimmed.indexOf('=');
+              const key = trimmed.substring(0, idx).trim();
+              let val = trimmed.substring(idx + 1).trim();
+              if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+                val = val.substring(1, val.length - 1);
+              }
+              config[key] = val;
+            }
+          });
+        }
+
+        let bootEntries: any[] = [];
+        if (snapData.bls_entries_backup && fs.existsSync(snapData.bls_entries_backup)) {
+          try {
+            bootEntries = JSON.parse(readProtectedFile(snapData.bls_entries_backup));
+          } catch (e) {}
+        }
+        
+        res.end(JSON.stringify({ config, bootEntries }));
+      } catch (e: any) {
+        res.statusCode = 500;
+        res.end(JSON.stringify({ error: e.message }));
+      }
       return true;
     }
 
@@ -965,10 +1013,6 @@ echo "[Bash Runtime] Execution completed successfully!"
                 logError('POST /api/deploy-pipeline', 'Deploy pipeline failed:', e.message);
                 throw new Error(`Failed during deployment:\n${e.message}`);
               }
-
-              res.end(JSON.stringify({ success: true, output }));
-              resolve();
-              return;
             }
 
             res.end(JSON.stringify({ success: true }));

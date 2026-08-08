@@ -236,9 +236,52 @@ fn main() {
                 Err(e) => { eprintln!("Failed to restore snapshot: {}", e); std::process::exit(1); }
             }
         }
-        _ => {
-            eprintln!("Unknown command: {}", args[1]);
-            std::process::exit(1);
+        "get-snapshot-details" => {
+            if args.len() < 3 {
+                eprintln!("Error: get-snapshot-details requires a timestamp ID");
+                std::process::exit(1);
+            }
+            let ts: i64 = match args[2].parse() {
+                Ok(v) => v,
+                Err(_) => {
+                    eprintln!("Error: '{}' is not a valid snapshot timestamp ID.", args[2]);
+                    std::process::exit(1);
+                }
+            };
+            match snapshot_mgr.get_snapshot_details(ts) {
+                Ok((config, boot_entries)) => {
+                    let mut config_map = std::collections::HashMap::new();
+                    for line in &config.lines {
+                        if let grub_editor_core::default_grub::ConfigLine::KeyValue { key, value, .. } = line {
+                            config_map.insert(key.clone(), value.clone());
+                        }
+                    }
+                    let res = serde_json::json!({
+                        "config": config_map,
+                        "bootEntries": boot_entries
+                    });
+                    println!("{}", serde_json::to_string_pretty(&res).unwrap());
+                }
+                Err(e) => {
+                    eprintln!("Failed to get snapshot details: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        cmd => {
+            let mut command = Command::new(cmd);
+            for arg in &args[2..] {
+                command.arg(arg);
+            }
+            match command.status() {
+                Ok(status) => {
+                    std::process::exit(status.code().unwrap_or(1));
+                }
+                Err(e) => {
+                    eprintln!("Failed to execute {}: {}", cmd, e);
+                    std::process::exit(1);
+                }
+            }
         }
     }
 }
