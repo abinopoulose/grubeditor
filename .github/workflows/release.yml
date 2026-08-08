@@ -1,54 +1,85 @@
-name: Release Ubuntu Application & DEB Package
+name: Release App
 
 on:
   push:
     branches:
-      - dev
+      - ci/add_build_script
   workflow_dispatch:
 
 jobs:
-  release-ubuntu-binaries:
-    runs-on: ubuntu-24.04
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
-      - name: Checkout Source Code
+      - name: Checkout Code
         uses: actions/checkout@v4
-        
-      - name: Install System Build Prerequisites
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-          
-      - name: Setup Node.js & npm
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
-          
-      - name: Setup Rust Toolchain
+
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-gnu
-          
-      - name: Install Node Dependencies
-        run: npm ci
-        
-      - name: Build Native Application & Debian Installer (.deb)
-        run: npm run tauri build
-        
-      - name: Stage Universal Release Tarball
+
+      - name: Install System Dependencies
         run: |
-          mkdir -p release-stage/packaging
-          cp install.sh uninstall.sh README.md release-stage/
-          cp -r packaging/* release-stage/packaging/
-          cp src-tauri/target/release/tauri-app release-stage/grubeditor
-          cp src-tauri/target/release/grub-editor-helper release-stage/grub-editor-helper
-          tar -czf grubeditor-linux-amd64.tar.gz -C release-stage .
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev policykit-1 build-essential curl wget
+
+      - name: Install NPM Dependencies
+        run: npm ci
+
+      - name: Build Rust Helper
+        run: |
+          cd src-tauri
+          cargo build --release -p grub-editor-helper
+
+      - name: Build Electron App
+        run: npm run build:electron -- -l dir
+
+      - name: Package Release
+        run: |
+          # Calculate dynamic version based on YYYY-2026, Day of Year, and HHmm
+          YYYY=$(date +%Y)
+          YEAR_DIFF=$((YYYY - 2026))
+          DOY=$(date +%-j)
+          HHMM=$(date +%H%M)
+          VERSION="v${YEAR_DIFF}.${DOY}.${HHMM}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
           
-      - name: Publish GitHub Release & Attach Binaries
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            grubeditor-linux-amd64.tar.gz
-            src-tauri/target/release/bundle/deb/*.deb
+          # Prepare package directory for tarball
+          mkdir -p package/grubeditor
+          
+          # Copy extracted Electron app (linux-unpacked)
+          cp -r release/linux-unpacked/* package/grubeditor/
+          
+          # Copy Rust helper and other required files
+          mkdir -p package/packaging
+          cp src-tauri/target/release/grub-editor-helper package/packaging/
+          cp packaging/io.grubeditor.helper.policy package/packaging/
+          cp packaging/grubeditor.desktop package/packaging/
+          
+          mkdir -p package/public
+          cp public/app_logo.png package/public/
+          
+          # Create historical and latest tarballs
+          cd package
+          tar -czf grubeditor-${VERSION}.tar.gz grubeditor packaging public
+          cp grubeditor-${VERSION}.tar.gz grubeditor.tar.gz
+
+      - name: Create or Update Latest Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Try to create 'latest' tag and release, ignore if it already exists
+          gh release create "latest" --title "Latest Build" --notes "Latest automated build for GrubEditor" || true
+          
+          # Upload/Replace the base grubeditor.tar.gz
+          gh release upload "latest" ./package/grubeditor.tar.gz --clobber
+          
+          # Upload the historical versioned package to the same release
+          gh release upload "latest" ./package/grubeditor-${VERSION}.tar.gz

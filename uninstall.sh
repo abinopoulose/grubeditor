@@ -8,6 +8,7 @@ fi
 
 echo "Uninstalling GrubEditor..."
 
+rm -rf /opt/grubeditor
 rm -f /usr/bin/grubeditor
 rm -f /usr/bin/grub-editor-helper
 rm -f /usr/share/polkit-1/actions/io.grubeditor.helper.policy
