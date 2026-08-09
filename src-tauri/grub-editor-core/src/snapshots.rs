@@ -110,6 +110,27 @@ impl SnapshotManager {
             None
         };
 
+        let bls_entries_backup = {
+            let overrides_path = crate::menu_entries::MenuEntryParser::get_overrides_path(distro);
+            if overrides_path.exists() {
+                let p = target_dir.join("boot_entries.json.bak");
+                match fs::copy(&overrides_path, &p) {
+                    Ok(_) => Some(p),
+                    Err(e) => {
+                        let msg = format!(
+                            "Warning: Failed to back up boot entries from {:?}: {}",
+                            overrides_path, e
+                        );
+                        eprintln!("{}", msg);
+                        warnings.push(msg);
+                        None
+                    }
+                }
+            } else {
+                None
+            }
+        };
+
         let date_string = format!("{} (UTC Timestamp)", now_ms);
         let snap = Snapshot {
             timestamp: now_ms,
@@ -117,7 +138,7 @@ impl SnapshotManager {
             description: description.to_string(),
             default_grub_backup,
             grub_cfg_backup,
-            bls_entries_backup: None,
+            bls_entries_backup,
             warnings,
         };
 
@@ -161,6 +182,18 @@ impl SnapshotManager {
         if let Some(cfg_bak) = snap.grub_cfg_backup {
             if cfg_bak.exists() {
                 fs::copy(&cfg_bak, &distro.grub_cfg_path)?;
+            }
+        }
+
+        let overrides_path = crate::menu_entries::MenuEntryParser::get_overrides_path(distro);
+        if let Some(ref bls_bak) = snap.bls_entries_backup {
+            if bls_bak.exists() {
+                fs::copy(bls_bak, &overrides_path)?;
+            }
+        } else {
+            // If the snapshot has no overrides, we remove the current overrides to accurately restore state
+            if overrides_path.exists() {
+                let _ = fs::remove_file(&overrides_path);
             }
         }
 

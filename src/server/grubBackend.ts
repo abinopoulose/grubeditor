@@ -694,27 +694,33 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
         const snapData = JSON.parse(readProtectedFile(metaPath));
         
         const config: Record<string, string> = {};
-        if (snapData.default_grub_backup && fs.existsSync(snapData.default_grub_backup)) {
-          const content = readProtectedFile(snapData.default_grub_backup);
-          content.split('\n').forEach(line => {
-            const trimmed = line.trim();
-            if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
-              const idx = trimmed.indexOf('=');
-              const key = trimmed.substring(0, idx).trim();
-              let val = trimmed.substring(idx + 1).trim();
-              if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-                val = val.substring(1, val.length - 1);
+        if (snapData.default_grub_backup) {
+          try {
+            const content = readProtectedFile(snapData.default_grub_backup);
+            content.split('\n').forEach(line => {
+              const trimmed = line.trim();
+              if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+                const idx = trimmed.indexOf('=');
+                const key = trimmed.substring(0, idx).trim();
+                let val = trimmed.substring(idx + 1).trim();
+                if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+                  val = val.substring(1, val.length - 1);
+                }
+                config[key] = val;
               }
-              config[key] = val;
-            }
-          });
+            });
+          } catch (e) {
+            logError('GET /api/snapshot-details', 'Failed to read default_grub_backup', e);
+          }
         }
 
         let bootEntries: any[] = [];
-        if (snapData.bls_entries_backup && fs.existsSync(snapData.bls_entries_backup)) {
+        if (snapData.bls_entries_backup) {
           try {
             bootEntries = JSON.parse(readProtectedFile(snapData.bls_entries_backup));
-          } catch (e) {}
+          } catch (e) {
+            logError('GET /api/snapshot-details', 'Failed to read bls_entries_backup', e);
+          }
         }
         
         res.end(JSON.stringify({ config, bootEntries }));
@@ -801,20 +807,32 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
 
               createServerSnapshot(`Auto-backup before restoring snapshot from ${new Date(timestamp).toLocaleString()}`);
 
-              if (snapData.default_grub_backup && fs.existsSync(snapData.default_grub_backup)) {
-                const defTarget = fs.existsSync('/etc/default/grub') ? '/etc/default/grub' : '/boot/grub/default';
-                writeProtectedFile(defTarget, readProtectedFile(snapData.default_grub_backup));
-                delete fileCache['/etc/default/grub'];
-                delete fileCache['/boot/grub/default'];
+              if (snapData.default_grub_backup) {
+                try {
+                  const defTarget = fs.existsSync('/etc/default/grub') ? '/etc/default/grub' : '/boot/grub/default';
+                  writeProtectedFile(defTarget, readProtectedFile(snapData.default_grub_backup));
+                  delete fileCache['/etc/default/grub'];
+                  delete fileCache['/boot/grub/default'];
+                } catch (e) {
+                  logError('POST /api/restore-snapshot', 'Failed to restore default_grub_backup', e);
+                }
               }
-              if (snapData.grub_cfg_backup && fs.existsSync(snapData.grub_cfg_backup)) {
-                const cfgTarget = fs.existsSync('/boot/grub2/grub.cfg') ? '/boot/grub2/grub.cfg' : '/boot/grub/grub.cfg';
-                writeProtectedFile(cfgTarget, readProtectedFile(snapData.grub_cfg_backup));
-                delete fileCache['/boot/grub/grub.cfg'];
-                delete fileCache['/boot/grub2/grub.cfg'];
+              if (snapData.grub_cfg_backup) {
+                try {
+                  const cfgTarget = fs.existsSync('/boot/grub2/grub.cfg') ? '/boot/grub2/grub.cfg' : '/boot/grub/grub.cfg';
+                  writeProtectedFile(cfgTarget, readProtectedFile(snapData.grub_cfg_backup));
+                  delete fileCache['/boot/grub/grub.cfg'];
+                  delete fileCache['/boot/grub2/grub.cfg'];
+                } catch (e) {
+                  logError('POST /api/restore-snapshot', 'Failed to restore grub_cfg_backup', e);
+                }
               }
-              if (snapData.bls_entries_backup && fs.existsSync(snapData.bls_entries_backup)) {
-                writeProtectedFile(getOverridesPath(), readProtectedFile(snapData.bls_entries_backup));
+              if (snapData.bls_entries_backup) {
+                try {
+                  writeProtectedFile(getOverridesPath(), readProtectedFile(snapData.bls_entries_backup));
+                } catch (e) {
+                  logError('POST /api/restore-snapshot', 'Failed to restore bls_entries_backup', e);
+                }
               }
               log('POST /api/restore-snapshot', 'Restore completed successfully');
               res.end(JSON.stringify({ success: true }));
@@ -914,9 +932,6 @@ set -x
 echo "[Bash Runtime] Stage 1: Initializing snapshot in ${snapDir}..."
 mkdir -p "${snapDir}"
 chmod 755 "${snapDir}"
-if [ -f "${defTarget}" ]; then cp "${defTarget}" "${snapMeta.default_grub_backup}"; fi
-if [ -f "${cfgTarget}" ]; then cp "${cfgTarget}" "${snapMeta.grub_cfg_backup}"; fi
-if [ -f "${overridesPath}" ]; then cp "${overridesPath}" "${snapMeta.bls_entries_backup}"; fi
 cp "${tmpMeta}" "${snapDir}/snapshot_metadata.json"
 chmod 644 "${snapDir}/snapshot_metadata.json"
 
@@ -944,9 +959,14 @@ while [ ! -f "${tmpPatched}" ]; do
   fi
 done
 
-echo "[Bash Runtime] Stage 6: Finalizing deployment..."
+echo "[Bash Runtime] Stage 6: Finalizing deployment & capturing snapshot..."
 cp "${tmpPatched}" "${cfgTarget}"
 chmod 644 "${cfgTarget}"
+
+if [ -n "${snapMeta.default_grub_backup}" ] && [ "${snapMeta.default_grub_backup}" != "null" ]; then cp "${defTarget}" "${snapMeta.default_grub_backup}"; fi
+if [ -n "${snapMeta.grub_cfg_backup}" ] && [ "${snapMeta.grub_cfg_backup}" != "null" ]; then cp "${cfgTarget}" "${snapMeta.grub_cfg_backup}"; fi
+if [ -n "${snapMeta.bls_entries_backup}" ] && [ "${snapMeta.bls_entries_backup}" != "null" ]; then cp "${overridesPath}" "${snapMeta.bls_entries_backup}"; fi
+
 echo "[Bash Runtime] Execution completed successfully!"
 `;
               fs.writeFileSync(scriptPath, bashScript);
