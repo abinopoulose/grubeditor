@@ -12,16 +12,21 @@ import {
   RotateCcw, 
   Lock, 
   ShieldCheck,
-  ListOrdered
+  ListOrdered,
+  Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import * as Dialog from '@radix-ui/react-dialog';
 
 interface BootMenuManagerProps {
   entries: BootEntry[];
   onChange: (entries: BootEntry[]) => void;
+  logAction?: (msg: string) => void;
 }
 
-export const BootMenuManager: React.FC<BootMenuManagerProps> = ({ entries, onChange }) => {
+export const BootMenuManager: React.FC<BootMenuManagerProps> = ({ entries, onChange, logAction }) => {
+  const [infoEntry, setInfoEntry] = React.useState<BootEntry | null>(null);
+
   const activeEntries = entries
     .map((entry, originalIdx) => ({ entry, originalIdx }))
     .filter(({ entry }) => !entry.deleted);
@@ -29,6 +34,13 @@ export const BootMenuManager: React.FC<BootMenuManagerProps> = ({ entries, onCha
   const removedEntries = entries
     .map((entry, originalIdx) => ({ entry, originalIdx }))
     .filter(({ entry }) => entry.deleted);
+
+  const isEntryRecovery = (entry: BootEntry) => {
+    const safeTitle = (entry.title || '').toLowerCase();
+    return entry.type === 'recovery' || (entry.id || '').toLowerCase().includes('recovery') || safeTitle.includes('recovery');
+  };
+
+  const activeKernelsCount = activeEntries.filter(({ entry }) => entry.isCurrent && !isEntryRecovery(entry)).length;
 
   const handleMove = (activeIdx: number, direction: 'up' | 'down') => {
     const targetActiveIdx = direction === 'up' ? activeIdx - 1 : activeIdx + 1;
@@ -38,6 +50,7 @@ export const BootMenuManager: React.FC<BootMenuManagerProps> = ({ entries, onCha
     const toOrigIdx = activeEntries[targetActiveIdx].originalIdx;
 
     console.log(`[GrubEditor BootMenu] MOVE: "${entries[fromOrigIdx].title}" ${direction} (swap positions ${fromOrigIdx} <-> ${toOrigIdx})`);
+    if (logAction) logAction(`Moved entry "${entries[fromOrigIdx].title}" ${direction} in the boot order.`);
     const updated = [...entries];
     const temp = updated[fromOrigIdx];
     updated[fromOrigIdx] = updated[toOrigIdx];
@@ -46,14 +59,19 @@ export const BootMenuManager: React.FC<BootMenuManagerProps> = ({ entries, onCha
   };
 
   const handleUpdateEntry = (originalIdx: number, field: keyof BootEntry, value: any) => {
+    if (logAction && field === 'title') {
+      logAction(`Renamed entry from "${entries[originalIdx].title}" to "${value}".`);
+    }
     const updated = [...entries];
     updated[originalIdx] = { ...updated[originalIdx], [field]: value };
     onChange(updated);
   };
 
   const handleDeleteEntry = (originalIdx: number) => {
-    if (entries[originalIdx]?.isCurrent) return;
+    const entry = entries[originalIdx];
+    if (entry?.isCurrent && !isEntryRecovery(entry) && activeKernelsCount <= 1) return;
     console.log(`[GrubEditor BootMenu] DELETE: "${entries[originalIdx].title}" (id="${entries[originalIdx].id}", origTitle="${(entries[originalIdx] as any).originalTitle}")`);
+    if (logAction) logAction(`Deleted (suppressed) entry "${entries[originalIdx].title}".`);
     const updated = [...entries];
     updated[originalIdx] = { ...updated[originalIdx], deleted: true, enabled: false };
     onChange(updated);
@@ -61,6 +79,7 @@ export const BootMenuManager: React.FC<BootMenuManagerProps> = ({ entries, onCha
 
   const handleRestoreEntry = (originalIdx: number) => {
     console.log(`[GrubEditor BootMenu] RESTORE: "${entries[originalIdx].title}" (id="${entries[originalIdx].id}")`);
+    if (logAction) logAction(`Restored entry "${entries[originalIdx].title}" from Recycle Bin.`);
     const updated = [...entries];
     updated[originalIdx] = { ...updated[originalIdx], deleted: false, enabled: true };
     onChange(updated);
@@ -122,7 +141,7 @@ export const BootMenuManager: React.FC<BootMenuManagerProps> = ({ entries, onCha
               const formattedNum = activeIdx < 10 ? `0${activeIdx}` : `${activeIdx}`;
               const safeTitle = (entry.title || '').toLowerCase();
               const isWindows = safeTitle.includes('windows');
-              const isRecovery = (entry.id || '').toLowerCase().includes('recovery') || safeTitle.includes('recovery');
+              const isRecovery = isEntryRecovery(entry);
               const isUefi = safeTitle.includes('uefi') || entry.type === 'efi';
 
               const hoverGlow = isWindows ? 'hover:!border-sky-500/60 hover:!shadow-[0_0_25px_rgba(56,189,248,0.25)]' :
@@ -191,22 +210,48 @@ export const BootMenuManager: React.FC<BootMenuManagerProps> = ({ entries, onCha
                   </div>
 
                   {/* Right Action Controls */}
-                  <div className="flex items-center justify-end gap-3 shrink-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-white/[0.08]">
-                    {entry.isCurrent ? (
-                      <span className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-emerald-300 border border-emerald-500/40 font-sans text-xs font-black shadow-[0_0_20px_rgba(16,185,129,0.25)] tracking-wide">
-                        <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-400" />
-                        <span>Protected (Active Kernel)</span>
-                      </span>
+                  <div className="flex items-center justify-end gap-2.5 shrink-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-white/[0.08]">
+                    {entry.isCurrent && !isRecovery && activeKernelsCount <= 1 ? (
+                      <>
+                        <span className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-emerald-300 border border-emerald-500/40 font-sans text-xs font-black shadow-[0_0_20px_rgba(16,185,129,0.25)] tracking-wide">
+                          <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-400" />
+                          <span>Protected (Active Kernel)</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setInfoEntry(entry)}
+                          className="p-3 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 hover:text-blue-300 transition-all cursor-pointer shrink-0"
+                          title="View internal boot details"
+                        >
+                          <Info className="w-4 h-4" />
+                        </button>
+                      </>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteEntry(originalIdx)}
-                        className="p-3 rounded-xl bg-rose-500/15 text-rose-400 border border-rose-500/30 hover:bg-rose-500/30 hover:text-rose-200 hover:shadow-[0_0_18px_rgba(244,63,94,0.35)] transition-all font-sans text-xs flex items-center gap-2 font-bold cursor-pointer shrink-0"
-                        title="Move to Recycle Bin"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        <span className="sm:hidden">Delete Option</span>
-                      </button>
+                      <div className="flex items-center gap-2.5">
+                        {entry.isCurrent && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-sans text-[11px] font-bold tracking-wide">
+                            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                            <span className="hidden xl:inline">Active Kernel</span>
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setInfoEntry(entry)}
+                          className="p-3 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 hover:text-blue-300 transition-all cursor-pointer shrink-0"
+                          title="View internal boot details"
+                        >
+                          <Info className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteEntry(originalIdx)}
+                          className="p-3 rounded-xl bg-rose-500/15 text-rose-400 border border-rose-500/30 hover:bg-rose-500/30 hover:text-rose-200 hover:shadow-[0_0_18px_rgba(244,63,94,0.35)] transition-all font-sans text-xs flex items-center gap-2 font-bold cursor-pointer shrink-0"
+                          title="Move to Recycle Bin"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span className="sm:hidden">Delete Option</span>
+                        </button>
+                      </div>
                     )}
                   </div>
                 </motion.div>
@@ -260,7 +305,16 @@ export const BootMenuManager: React.FC<BootMenuManagerProps> = ({ entries, onCha
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-end gap-3 shrink-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-white/[0.08]">
+                  <div className="flex items-center justify-end gap-2.5 shrink-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-white/[0.08]">
+                    <button
+                      type="button"
+                      onClick={() => setInfoEntry(entry)}
+                      className="p-3 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 hover:text-blue-300 transition-all cursor-pointer shrink-0"
+                      title="View internal boot details"
+                    >
+                      <Info className="w-4 h-4" />
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => handleRestoreEntry(originalIdx)}
@@ -276,6 +330,72 @@ export const BootMenuManager: React.FC<BootMenuManagerProps> = ({ entries, onCha
           </div>
         </section>
       )}
+
+      {/* Entry Details Dialog */}
+      <Dialog.Root open={!!infoEntry} onOpenChange={(open) => !open && setInfoEntry(null)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md transition-opacity animate-pro" />
+          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-lg translate-x-[-50%] translate-y-[-50%] rounded-3xl border border-white/[0.15] bg-[#0a1024]/95 p-8 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.8)] backdrop-blur-2xl focus:outline-none animate-pro text-slate-100 font-sans">
+            <Dialog.Title className="flex items-center gap-4 border-b border-white/[0.08] pb-5">
+              <div className="p-3.5 rounded-2xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                <Info className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-xl text-white tracking-tight">Boot Entry Details</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Internal system identifiers and boot arguments</p>
+              </div>
+            </Dialog.Title>
+            
+            <div className="py-5 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+              {infoEntry && (
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="bg-black/20 p-3.5 rounded-xl border border-white/[0.04]">
+                    <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Display Title</div>
+                    <div className="text-sm text-slate-300 font-bold">{infoEntry.title}</div>
+                  </div>
+                  
+                  {(infoEntry.version || infoEntry.options || infoEntry.args) && (
+                    <div className="bg-black/20 p-3.5 rounded-xl border border-white/[0.04]">
+                      {infoEntry.version && (
+                        <div className="mb-3">
+                          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Detected Kernel Version</div>
+                          <div className="text-sm text-indigo-300 font-mono">{infoEntry.version}</div>
+                        </div>
+                      )}
+                      {(infoEntry.options || infoEntry.args) && (
+                        <div>
+                          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Detected Kernel Arguments</div>
+                          <div className="text-sm text-emerald-400 font-mono break-words">{infoEntry.options || infoEntry.args}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {infoEntry.raw_boot_commands && (
+                    <div className="bg-black/20 p-3.5 rounded-xl border border-white/[0.04]">
+                      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Raw Boot Configuration</div>
+                      <div className="text-[13px] text-slate-300 font-mono break-words whitespace-pre-wrap leading-relaxed">
+                        {infoEntry.raw_boot_commands}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            <div className="flex justify-end pt-5 border-t border-white/[0.08]">
+              <button
+                type="button"
+                onClick={() => setInfoEntry(null)}
+                className="btn-glass !py-2.5 !px-8 text-xs font-bold"
+              >
+                Close
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
     </div>
   );
 };

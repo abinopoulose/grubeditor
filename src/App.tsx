@@ -21,6 +21,12 @@ export default function App() {
   const [showSnapshotDialog, setShowSnapshotDialog] = useState<boolean>(false);
   const [snapshotNameInput, setSnapshotNameInput] = useState<string>('Manual configuration modification');
   const [authError, setAuthError] = useState<string | null>(null);
+  const [activityLogs, setActivityLogs] = useState<string[]>([]);
+
+  const logAction = (msg: string) => {
+    const time = new Date().toLocaleTimeString([], { hour12: false });
+    setActivityLogs(prev => [...prev, `[${time}] ${msg}`]);
+  };
 
   const reloadData = async () => {
     try {
@@ -56,7 +62,44 @@ export default function App() {
     setIsApplying(true);
     setShowModal(true);
     const snapTitle = customSnapshotName || "Manual configuration modification";
-    setRegenOutput(`[Deploy] Initializing deployment pipeline...\n[Deploy] Snapshot Target: "${snapTitle}"\n[Deploy] Authenticating via Polkit...`);
+    
+    // Construct Detailed Deployment Plan
+    let planSummary = `\n==================================================\n`;
+    planSummary += `          DEPLOYMENT AUDIT & PLAN          \n`;
+    planSummary += `==================================================\n\n`;
+    planSummary += `[1] RECORDED USER ACTIONS:\n`;
+    if (activityLogs.length === 0) {
+      planSummary += `    No discrete actions logged during this session.\n`;
+    } else {
+      activityLogs.forEach(log => {
+        planSummary += `    • ${log}\n`;
+      });
+    }
+
+    planSummary += `\n[2] PLANNED GENERAL CONFIGURATION:\n`;
+    Object.entries(config).forEach(([k, v]) => {
+      planSummary += `    • ${k} = "${v}"\n`;
+    });
+
+    planSummary += `\n[3] PLANNED BOOT MENU STATE:\n`;
+    const activeE = bootEntries.filter(e => !e.deleted);
+    const deletedE = bootEntries.filter(e => e.deleted);
+    planSummary += `  > ACTIVE ENTRIES (${activeE.length}):\n`;
+    activeE.forEach((e, idx) => {
+      planSummary += `    ${idx + 1}. [${e.type?.toUpperCase()}] ${e.title}\n`;
+      if (e.originalTitle && e.originalTitle !== e.title) {
+        planSummary += `       (Renamed from: "${e.originalTitle}")\n`;
+      }
+    });
+    if (deletedE.length > 0) {
+      planSummary += `\n  > SUPPRESSED / DELETED ENTRIES (${deletedE.length}):\n`;
+      deletedE.forEach(e => {
+        planSummary += `    • ${e.title}\n`;
+      });
+    }
+    planSummary += `==================================================\n\n`;
+
+    setRegenOutput(`[Deploy] Initializing deployment pipeline...\n[Deploy] Snapshot Target: "${snapTitle}"\n${planSummary}[Deploy] Authenticating via Polkit...`);
     
     console.log('[GrubEditor Deploy] Starting deploy pipeline...');
     try {
@@ -240,10 +283,10 @@ export default function App() {
               <GeneralSettings config={config} onChange={handleConfigChange} bootEntries={bootEntries} />
             )}
             {activeTab === 'entries' && (
-              <BootMenuManager entries={bootEntries} onChange={handleBootEntriesChange} />
+              <BootMenuManager entries={bootEntries} onChange={handleBootEntriesChange} logAction={logAction} />
             )}
             {activeTab === 'snapshots' && (
-              <SnapshotsPanel onRestore={reloadData} />
+              <SnapshotsPanel onRestore={reloadData} logAction={logAction} />
             )}
           </motion.div>
         </AnimatePresence>
