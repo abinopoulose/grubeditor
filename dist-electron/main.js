@@ -89,7 +89,8 @@ function se(s) {
         isCurrent: x,
         is_current: x,
         is_default: c.length === 0,
-        parent_id: g
+        parent_id: g,
+        raw_boot_commands: a.trim()
       });
     }
   }

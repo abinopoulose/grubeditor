@@ -6,9 +6,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface SnapshotsPanelProps {
   onRestore: () => void;
+  logAction?: (msg: string) => void;
 }
 
-export const SnapshotsPanel: React.FC<SnapshotsPanelProps> = ({ onRestore }) => {
+export const SnapshotsPanel: React.FC<SnapshotsPanelProps> = ({ onRestore, logAction }) => {
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [restoringId, setRestoringId] = useState<number | null>(null);
   const [loadingDetailsId, setLoadingDetailsId] = useState<number | null>(null);
@@ -45,6 +46,7 @@ export const SnapshotsPanel: React.FC<SnapshotsPanelProps> = ({ onRestore }) => 
       await new Promise(res => setTimeout(res, 800));
       await ApiService.restoreSnapshot(snap.timestamp);
       setNotification(`Successfully restored configuration from ${snap.date_string}`);
+      if (logAction) logAction(`Restored system state from snapshot "${snap.description}" (${formatSnapshotDate(snap.timestamp)}).`);
       loadSnaps();
       onRestore();
     } catch (e: any) {

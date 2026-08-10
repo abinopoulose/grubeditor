@@ -55,6 +55,8 @@ export interface BootEntry {
   originalTitle?: string;
   version?: string;
   options?: string;
+  args?: string;
+  raw_boot_commands?: string;
   enabled?: boolean;
   deleted?: boolean;
   isCurrent?: boolean;

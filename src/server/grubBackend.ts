@@ -156,6 +156,7 @@ export function parseGrubCfg(content: string): BootEntry[] {
         is_current: isCurrent,
         is_default: entries.length === 0,
         parent_id: currentParentId,
+        raw_boot_commands: blockContent.trim(),
       });
     }
   }
