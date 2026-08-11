@@ -18,7 +18,14 @@ rm -f /usr/share/icons/hicolor/scalable/apps/grubeditor.png
 update-desktop-database -q /usr/share/applications || true
 gtk-update-icon-cache -f -t /usr/share/icons/hicolor/ || true
 
-read -p "Do you want to delete all cached or created files made by GrubEditor? (y/N): " -r response
+response="N"
+if [ -t 0 ]; then
+    read -p "Do you want to delete all cached or created files made by GrubEditor? (y/N): " -r response
+elif [ -c /dev/tty ]; then
+    read -p "Do you want to delete all cached or created files made by GrubEditor? (y/N): " -r response < /dev/tty
+else
+    echo "Non-interactive environment detected, keeping cached files."
+fi
 if [[ "$response" =~ ^[Yy]$ ]]; then
     echo "Deleting cached and created files..."
     rm -rf /var/lib/grub-editor
