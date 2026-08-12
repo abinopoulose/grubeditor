@@ -13,7 +13,7 @@ export const SnapshotsPanel: React.FC<SnapshotsPanelProps> = ({ onRestore, logAc
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [restoringId, setRestoringId] = useState<number | null>(null);
   const [loadingDetailsId, setLoadingDetailsId] = useState<number | null>(null);
-  const [notification, setNotification] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
 
   const [viewingSnapshot, setViewingSnapshot] = useState<{snap: Snapshot, details: any, liveConfig: any, liveEntries: BootEntry[]} | null>(null);
 
@@ -33,7 +33,7 @@ export const SnapshotsPanel: React.FC<SnapshotsPanelProps> = ({ onRestore, logAc
       const liveEntries = await ApiService.getBootEntries();
       setViewingSnapshot({ snap, details, liveConfig, liveEntries });
     } catch (e: any) {
-      setNotification(`Failed to load details: ${e.message}`);
+      setNotification({ type: 'error', message: `Failed to load details: ${e.message}` });
       setTimeout(() => setNotification(null), 5000);
     } finally {
       setLoadingDetailsId(null);
@@ -45,12 +45,12 @@ export const SnapshotsPanel: React.FC<SnapshotsPanelProps> = ({ onRestore, logAc
     try {
       await new Promise(res => setTimeout(res, 800));
       await ApiService.restoreSnapshot(snap.timestamp);
-      setNotification(`Successfully restored configuration from ${snap.date_string}`);
+      setNotification({ type: 'success', message: `Successfully restored configuration from ${snap.date_string || formatSnapshotDate(snap.timestamp)}` });
       if (logAction) logAction(`Restored system state from snapshot "${snap.description}" (${formatSnapshotDate(snap.timestamp)}).`);
       loadSnaps();
       onRestore();
     } catch (e: any) {
-      setNotification(`Failed to restore snapshot: ${e.message || 'Unknown error occurred'}`);
+      setNotification({ type: 'error', message: `Failed to restore snapshot: ${e.message || 'Unknown error occurred'}` });
     } finally {
       setRestoringId(null);
     }
@@ -229,10 +229,17 @@ export const SnapshotsPanel: React.FC<SnapshotsPanelProps> = ({ onRestore, logAc
         <motion.div 
           initial={{ opacity: 0, y: -10, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-3 shadow-[0_0_25px_rgba(16,185,129,0.25)] backdrop-blur-xl"
+          className={`p-4 rounded-2xl border text-xs font-bold flex items-center gap-3 backdrop-blur-xl ${
+            notification.type === 'success' 
+              ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 shadow-[0_0_25px_rgba(16,185,129,0.25)]' 
+              : 'bg-rose-500/20 border-rose-500/40 text-rose-300 shadow-[0_0_25px_rgba(244,63,94,0.25)]'
+          }`}
         >
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 animate-pulse" />
-          <span className="text-sm font-extrabold text-white">{notification}</span>
+          {notification.type === 'success' 
+            ? <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 animate-pulse" />
+            : <X className="w-5 h-5 text-rose-400 shrink-0" />
+          }
+          <span className="text-sm font-extrabold text-white">{notification.message}</span>
         </motion.div>
       )}
 
