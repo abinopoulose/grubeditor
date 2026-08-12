@@ -12,32 +12,24 @@ export function logError(stage: string, ...args: any[]) {
   console.error(`${LOG_PREFIX} [${stage}] ERROR:`, ...args);
 }
 
-const fileCache: Record<string, { time: number; content: string }> = {};
+const fileCache: Record<string, { timestamp: number; data: string }> = {};
 
-export function readProtectedFile(filepath: string, maxAgeMs = 0): string {
+export function readProtectedFile(filepath: string, cacheTime = 5000): string {
   const now = Date.now();
-  if (fileCache[filepath] && (now - fileCache[filepath].time) < maxAgeMs) {
-    return fileCache[filepath].content;
+  if (fileCache[filepath] && (now - fileCache[filepath].timestamp) < cacheTime) {
+    return fileCache[filepath].data;
   }
   let content = "";
   try {
     content = fs.readFileSync(filepath, 'utf8');
-  } catch (e: any) {
-    if (e.code === 'ENOENT') {
-      throw new Error(`File not found: ${filepath}`);
-    }
+  } catch {
     try {
-      content = execSync(`sudo -n cat "${filepath}" 2>/dev/null`, { encoding: 'utf8' });
-    } catch {
-      try {
-        content = execSync(`pkexec /usr/bin/grub-editor-helper cat "${filepath}"`, { encoding: 'utf8' });
-      } catch (err: any) {
-        console.error(`Failed to read ${filepath} via pkexec:`, err.message);
-        throw new Error(`Cannot read ${filepath}: permission denied or authentication dismissed.`);
-      }
+      content = execSync(`pkexec /usr/bin/grub-editor-helper cat "${filepath}"`, { encoding: 'utf8' });
+    } catch (e: any) {
+      throw new Error(`File not found or unreadable: ${filepath}`);
     }
   }
-  fileCache[filepath] = { time: now, content };
+  fileCache[filepath] = { data: content, timestamp: now };
   return content;
 }
 
@@ -178,16 +170,12 @@ export function writeProtectedFile(filepath: string, content: string): void {
     const tmpPath = path.join(os.tmpdir(), `grub-write-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`);
     fs.writeFileSync(tmpPath, content, 'utf8');
     try {
-      execSync(`sudo -n cp "${tmpPath}" "${filepath}" 2>/dev/null && rm -f "${tmpPath}"`, { stdio: 'ignore' });
-    } catch {
-      try {
-        execSync(`pkexec /usr/bin/grub-editor-helper sh -c "cp '${tmpPath}' '${filepath}' && chmod 0644 '${filepath}'"`, { stdio: 'ignore' });
-      } catch (err: any) {
-        console.error(`Failed to write ${filepath} via pkexec:`, err.message);
-        throw new Error(`Cannot write to ${filepath}: permission denied or authentication dismissed.`);
-      } finally {
-        if (fs.existsSync(tmpPath)) try { fs.unlinkSync(tmpPath); } catch {}
-      }
+      execSync(`pkexec /usr/bin/grub-editor-helper sh -c "cp '${tmpPath}' '${filepath}' && chmod 0644 '${filepath}'"`, { stdio: 'ignore' });
+    } catch (err: any) {
+      console.error(`Failed to write ${filepath} via pkexec:`, err.message);
+      throw new Error(`Cannot write to ${filepath}: permission denied or authentication dismissed.`);
+    } finally {
+      if (fs.existsSync(tmpPath)) try { fs.unlinkSync(tmpPath); } catch {}
     }
   }
   delete fileCache[filepath];
@@ -808,35 +796,37 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
 
               createServerSnapshot(`Auto-backup before restoring snapshot from ${new Date(timestamp).toLocaleString()}`);
 
-              if (snapData.default_grub_backup) {
-                try {
+              try {
+                if (snapData.default_grub_backup && fs.existsSync(snapData.default_grub_backup)) {
                   const defTarget = fs.existsSync('/etc/default/grub') ? '/etc/default/grub' : '/boot/grub/default';
                   writeProtectedFile(defTarget, readProtectedFile(snapData.default_grub_backup));
                   delete fileCache['/etc/default/grub'];
                   delete fileCache['/boot/grub/default'];
-                } catch (e) {
-                  logError('POST /api/restore-snapshot', 'Failed to restore default_grub_backup', e);
                 }
-              }
-              if (snapData.grub_cfg_backup) {
-                try {
+                if (snapData.grub_cfg_backup && fs.existsSync(snapData.grub_cfg_backup)) {
                   const cfgTarget = fs.existsSync('/boot/grub2/grub.cfg') ? '/boot/grub2/grub.cfg' : '/boot/grub/grub.cfg';
                   writeProtectedFile(cfgTarget, readProtectedFile(snapData.grub_cfg_backup));
                   delete fileCache['/boot/grub/grub.cfg'];
                   delete fileCache['/boot/grub2/grub.cfg'];
-                } catch (e) {
-                  logError('POST /api/restore-snapshot', 'Failed to restore grub_cfg_backup', e);
                 }
-              }
-              if (snapData.bls_entries_backup) {
-                try {
-                  writeProtectedFile(getOverridesPath(), readProtectedFile(snapData.bls_entries_backup));
-                } catch (e) {
-                  logError('POST /api/restore-snapshot', 'Failed to restore bls_entries_backup', e);
+                
+                let hasOverridesBackup = false;
+                if (snapData.bls_entries_backup && fs.existsSync(snapData.bls_entries_backup)) {
+                  const content = readProtectedFile(snapData.bls_entries_backup);
+                  writeProtectedFile(getOverridesPath(), content);
+                  hasOverridesBackup = true;
                 }
+                if (!hasOverridesBackup) {
+                  writeProtectedFile(getOverridesPath(), '[]');
+                }
+                
+                log('POST /api/restore-snapshot', 'Restore completed successfully');
+                res.end(JSON.stringify({ success: true }));
+              } catch (e: any) {
+                logError('POST /api/restore-snapshot', 'Restore aborted due to error:', e.message);
+                res.statusCode = 500;
+                res.end(JSON.stringify({ success: false, error: e.message }));
               }
-              log('POST /api/restore-snapshot', 'Restore completed successfully');
-              res.end(JSON.stringify({ success: true }));
               resolve();
               return;
             }
@@ -917,6 +907,7 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
               // Snapshot metadata
               const snapMeta = {
                 timestamp,
+                date_string: `${timestamp} (UTC Timestamp)`,
                 description: snapTitle,
                 default_grub_backup: path.join(snapDir, 'default_grub.bak'),
                 grub_cfg_backup: fs.existsSync(cfgTarget) ? path.join(snapDir, 'grub.cfg.bak') : null,
@@ -935,6 +926,10 @@ mkdir -p "${snapDir}"
 chmod 755 "${snapDir}"
 cp "${tmpMeta}" "${snapDir}/snapshot_metadata.json"
 chmod 644 "${snapDir}/snapshot_metadata.json"
+
+if [ -n "${snapMeta.default_grub_backup}" ] && [ "${snapMeta.default_grub_backup}" != "null" ] && [ -f "${defTarget}" ]; then cp "${defTarget}" "${snapMeta.default_grub_backup}"; chmod 644 "${snapMeta.default_grub_backup}"; fi
+if [ -n "${snapMeta.grub_cfg_backup}" ] && [ "${snapMeta.grub_cfg_backup}" != "null" ] && [ -f "${cfgTarget}" ]; then cp "${cfgTarget}" "${snapMeta.grub_cfg_backup}"; chmod 644 "${snapMeta.grub_cfg_backup}"; fi
+if [ -n "${snapMeta.bls_entries_backup}" ] && [ "${snapMeta.bls_entries_backup}" != "null" ] && [ -f "${overridesPath}" ]; then cp "${overridesPath}" "${snapMeta.bls_entries_backup}"; chmod 644 "${snapMeta.bls_entries_backup}"; fi
 
 echo "[Bash Runtime] Stage 2: Applying new GRUB configurations..."
 cp "${tmpConfig}" "${defTarget}"
@@ -960,13 +955,9 @@ while [ ! -f "${tmpPatched}" ]; do
   fi
 done
 
-echo "[Bash Runtime] Stage 6: Finalizing deployment & capturing snapshot..."
+echo "[Bash Runtime] Stage 6: Finalizing deployment..."
 cp "${tmpPatched}" "${cfgTarget}"
 chmod 644 "${cfgTarget}"
-
-if [ -n "${snapMeta.default_grub_backup}" ] && [ "${snapMeta.default_grub_backup}" != "null" ]; then cp "${defTarget}" "${snapMeta.default_grub_backup}"; fi
-if [ -n "${snapMeta.grub_cfg_backup}" ] && [ "${snapMeta.grub_cfg_backup}" != "null" ]; then cp "${cfgTarget}" "${snapMeta.grub_cfg_backup}"; fi
-if [ -n "${snapMeta.bls_entries_backup}" ] && [ "${snapMeta.bls_entries_backup}" != "null" ]; then cp "${overridesPath}" "${snapMeta.bls_entries_backup}"; fi
 
 echo "[Bash Runtime] Execution completed successfully!"
 `;
