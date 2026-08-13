@@ -22,7 +22,10 @@ export function readProtectedFile(filepath: string, cacheTime = 5000): string {
   let content = "";
   try {
     content = fs.readFileSync(filepath, 'utf8');
-  } catch {
+  } catch (err: any) {
+    if (err.code === 'ENOENT') {
+      throw new Error(`File not found: ${filepath}`);
+    }
     try {
       content = execSync(`pkexec /usr/bin/grub-editor-helper cat "${filepath}"`, { encoding: 'utf8' });
     } catch (e: any) {
@@ -45,6 +48,7 @@ export interface BootEntry {
   is_current?: boolean;
   is_default?: boolean;
   parent_id?: string;
+  raw_boot_commands?: string;
 }
 
 export function parseGrubCfg(content: string): BootEntry[] {
@@ -156,21 +160,28 @@ export function parseGrubCfg(content: string): BootEntry[] {
 }
 
 export function getOverridesPath(): string {
-  if (fs.existsSync('/boot/grub2')) return '/boot/grub2/grub-editor-entries.json';
-  if (fs.existsSync('/boot/grub')) return '/boot/grub/grub-editor-entries.json';
-  const dir = path.join(os.homedir(), '.grubdeck');
-  if (!fs.existsSync(dir)) try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+  const dir = '/var/lib/grub-editor';
+  try {
+    if (!fs.existsSync(dir)) {
+      if (process.getuid && process.getuid() === 0) {
+        fs.mkdirSync(dir, { recursive: true });
+        fs.chmodSync(dir, 0o755);
+      }
+    }
+  } catch (e) {}
   return path.join(dir, 'grub-editor-entries.json');
 }
 
 export function writeProtectedFile(filepath: string, content: string): void {
   try {
+    const parentDir = path.dirname(filepath);
+    if (!fs.existsSync(parentDir)) fs.mkdirSync(parentDir, { recursive: true });
     fs.writeFileSync(filepath, content, 'utf8');
   } catch {
     const tmpPath = path.join(os.tmpdir(), `grub-write-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`);
     fs.writeFileSync(tmpPath, content, 'utf8');
     try {
-      execSync(`pkexec /usr/bin/grub-editor-helper sh -c "cp '${tmpPath}' '${filepath}' && chmod 0644 '${filepath}'"`, { stdio: 'ignore' });
+      execSync(`pkexec /usr/bin/grub-editor-helper sh -c "mkdir -p '$(dirname "${filepath}")' && chmod 755 '$(dirname "${filepath}")' && cp '${tmpPath}' '${filepath}' && chmod 0644 '${filepath}'"`, { stdio: 'ignore' });
     } catch (err: any) {
       console.error(`Failed to write ${filepath} via pkexec:`, err.message);
       throw new Error(`Cannot write to ${filepath}: permission denied or authentication dismissed.`);
@@ -384,7 +395,11 @@ export function getSnapshotsDir(): string {
   const p = '/var/lib/grub-editor/backups';
   if (process.getuid && process.getuid() === 0) {
     if (!fs.existsSync(p)) {
-      try { fs.mkdirSync(p, { recursive: true }); } catch {}
+      try {
+        fs.mkdirSync(p, { recursive: true });
+        fs.chmodSync('/var/lib/grub-editor', 0o755);
+        fs.chmodSync(p, 0o755);
+      } catch {}
     }
   }
   return p;
@@ -711,8 +726,19 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
             logError('GET /api/snapshot-details', 'Failed to read bls_entries_backup', e);
           }
         }
+
+        let snapEntries: any[] = [];
+        if (snapData.grub_cfg_backup) {
+          try {
+            const grubCfgContent = readProtectedFile(snapData.grub_cfg_backup);
+            const parsedSysEntries = parseGrubCfg(grubCfgContent);
+            snapEntries = mergeEntriesWithOverrides(parsedSysEntries, bootEntries);
+          } catch (e) {
+             logError('GET /api/snapshot-details', 'Failed to parse snapshot grub_cfg', e);
+          }
+        }
         
-        res.end(JSON.stringify({ config, bootEntries }));
+        res.end(JSON.stringify({ config, bootEntries, snapEntries }));
       } catch (e: any) {
         res.statusCode = 500;
         res.end(JSON.stringify({ error: e.message }));
@@ -730,9 +756,6 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
             if (pathname === '/api/save-grub-config') {
               const { newConfig, reason, createSnapshot } = data;
               log('POST /api/save-grub-config', `Saving config (createSnapshot=${createSnapshot}, reason="${reason}")`);
-              if (createSnapshot) {
-                createServerSnapshot(reason || "Modified GRUB general configuration");
-              }
               if (newConfig) {
                 const lines: string[] = ["# Updated via GrubEditor GUI"];
                 for (const [k, v] of Object.entries(newConfig)) {
@@ -754,6 +777,9 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
                 delete fileCache['/etc/default/grub'];
                 delete fileCache['/boot/grub/default'];
               }
+              if (createSnapshot) {
+                createServerSnapshot(reason || "Modified GRUB general configuration");
+              }
               res.end(JSON.stringify({ success: true }));
               resolve();
               return;
@@ -762,9 +788,6 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
             if (pathname === '/api/save-boot-entries') {
               const { newEntries, reason, createSnapshot } = data;
               log('POST /api/save-boot-entries', `Received ${newEntries?.length ?? 0} entries to save (createSnapshot=${createSnapshot}, reason="${reason}")`);
-              if (createSnapshot) {
-                createServerSnapshot(reason || "Modified boot menu entries & ordering");
-              }
               if (newEntries && Array.isArray(newEntries)) {
                 const toSave = newEntries.map((e: any) => ({ ...e, originalTitle: e.originalTitle || e.title }));
                 const deletedCount = toSave.filter((e: any) => e.deleted).length;
@@ -775,6 +798,9 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
                 });
                 writeProtectedFile(getOverridesPath(), JSON.stringify(toSave, null, 2));
                 log('POST /api/save-boot-entries', 'Write successful');
+              }
+              if (createSnapshot) {
+                createServerSnapshot(reason || "Modified boot menu entries & ordering");
               }
               delete fileCache['/boot/grub/grub.cfg'];
               delete fileCache['/boot/grub2/grub.cfg'];
@@ -797,28 +823,42 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
               createServerSnapshot(`Auto-backup before restoring snapshot from ${new Date(timestamp).toLocaleString()}`);
 
               try {
+                const isRoot = process.getuid ? process.getuid() === 0 : false;
+                const scriptPath = `/tmp/grub-editor-restore-script-${Date.now()}.sh`;
+                let bashScript = `#!/bin/bash\nset -e\nset -x\n`;
+
                 if (snapData.default_grub_backup && fs.existsSync(snapData.default_grub_backup)) {
                   const defTarget = fs.existsSync('/etc/default/grub') ? '/etc/default/grub' : '/boot/grub/default';
-                  writeProtectedFile(defTarget, readProtectedFile(snapData.default_grub_backup));
-                  delete fileCache['/etc/default/grub'];
-                  delete fileCache['/boot/grub/default'];
+                  bashScript += `cp "${snapData.default_grub_backup}" "${defTarget}"\nchmod 644 "${defTarget}"\n`;
                 }
                 if (snapData.grub_cfg_backup && fs.existsSync(snapData.grub_cfg_backup)) {
                   const cfgTarget = fs.existsSync('/boot/grub2/grub.cfg') ? '/boot/grub2/grub.cfg' : '/boot/grub/grub.cfg';
-                  writeProtectedFile(cfgTarget, readProtectedFile(snapData.grub_cfg_backup));
-                  delete fileCache['/boot/grub/grub.cfg'];
-                  delete fileCache['/boot/grub2/grub.cfg'];
+                  bashScript += `cp "${snapData.grub_cfg_backup}" "${cfgTarget}"\nchmod 644 "${cfgTarget}"\n`;
                 }
                 
-                let hasOverridesBackup = false;
+                const overridesTarget = getOverridesPath();
+                const overridesDir = path.dirname(overridesTarget);
+                bashScript += `mkdir -p "${overridesDir}"\nchmod 755 "${overridesDir}"\n`;
                 if (snapData.bls_entries_backup && fs.existsSync(snapData.bls_entries_backup)) {
-                  const content = readProtectedFile(snapData.bls_entries_backup);
-                  writeProtectedFile(getOverridesPath(), content);
-                  hasOverridesBackup = true;
+                  bashScript += `cp "${snapData.bls_entries_backup}" "${overridesTarget}"\nchmod 644 "${overridesTarget}"\n`;
+                } else {
+                  bashScript += `echo "[]" > "${overridesTarget}"\nchmod 644 "${overridesTarget}"\n`;
                 }
-                if (!hasOverridesBackup) {
-                  writeProtectedFile(getOverridesPath(), '[]');
-                }
+
+                fs.writeFileSync(scriptPath, bashScript, 'utf8');
+                log('POST /api/restore-snapshot', 'Executing Batched Restore Script...');
+                
+                const cmdArgs = isRoot ? ['bash', scriptPath] : ['/usr/bin/grub-editor-helper', 'bash', scriptPath];
+                const cmdExec = isRoot ? 'bash' : 'pkexec';
+                
+                execSync(`${cmdExec} ${cmdArgs.join(' ')}`, { stdio: 'ignore' });
+                try { if (fs.existsSync(scriptPath)) fs.unlinkSync(scriptPath); } catch {}
+                
+                delete fileCache['/etc/default/grub'];
+                delete fileCache['/boot/grub/default'];
+                delete fileCache['/boot/grub/grub.cfg'];
+                delete fileCache['/boot/grub2/grub.cfg'];
+                delete fileCache[overridesTarget];
                 
                 log('POST /api/restore-snapshot', 'Restore completed successfully');
                 res.end(JSON.stringify({ success: true }));
@@ -921,30 +961,20 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
               const bashScript = `#!/bin/bash
 set -e
 set -x
-echo "[Bash Runtime] Stage 1: Initializing snapshot in ${snapDir}..."
-mkdir -p "${snapDir}"
-chmod 755 "${snapDir}"
-cp "${tmpMeta}" "${snapDir}/snapshot_metadata.json"
-chmod 644 "${snapDir}/snapshot_metadata.json"
-
-if [ -n "${snapMeta.default_grub_backup}" ] && [ "${snapMeta.default_grub_backup}" != "null" ] && [ -f "${defTarget}" ]; then cp "${defTarget}" "${snapMeta.default_grub_backup}"; chmod 644 "${snapMeta.default_grub_backup}"; fi
-if [ -n "${snapMeta.grub_cfg_backup}" ] && [ "${snapMeta.grub_cfg_backup}" != "null" ] && [ -f "${cfgTarget}" ]; then cp "${cfgTarget}" "${snapMeta.grub_cfg_backup}"; chmod 644 "${snapMeta.grub_cfg_backup}"; fi
-if [ -n "${snapMeta.bls_entries_backup}" ] && [ "${snapMeta.bls_entries_backup}" != "null" ] && [ -f "${overridesPath}" ]; then cp "${overridesPath}" "${snapMeta.bls_entries_backup}"; chmod 644 "${snapMeta.bls_entries_backup}"; fi
-
-echo "[Bash Runtime] Stage 2: Applying new GRUB configurations..."
+echo "[Bash Runtime] Stage 1: Applying new GRUB configurations..."
 cp "${tmpConfig}" "${defTarget}"
 chmod 644 "${defTarget}"
 cp "${tmpEntries}" "${overridesPath}"
 chmod 644 "${overridesPath}"
 
-echo "[Bash Runtime] Stage 3: Regenerating bootloader via update-grub..."
+echo "[Bash Runtime] Stage 2: Regenerating bootloader via update-grub..."
 update-grub 2>&1
 
-echo "[Bash Runtime] Stage 4: Exposing raw configuration for Node.js patching..."
+echo "[Bash Runtime] Stage 3: Exposing raw configuration for Node.js patching..."
 cat "${cfgTarget}" > "${rawCfgOut}"
 chmod 666 "${rawCfgOut}"
 
-echo "[Bash Runtime] Stage 5: Waiting for Node.js to apply dynamic overrides..."
+echo "[Bash Runtime] Stage 4: Waiting for Node.js to apply dynamic overrides..."
 COUNT=0
 while [ ! -f "${tmpPatched}" ]; do
   sleep 0.5
@@ -955,9 +985,19 @@ while [ ! -f "${tmpPatched}" ]; do
   fi
 done
 
-echo "[Bash Runtime] Stage 6: Finalizing deployment..."
+echo "[Bash Runtime] Stage 5: Finalizing deployment..."
 cp "${tmpPatched}" "${cfgTarget}"
 chmod 644 "${cfgTarget}"
+
+echo "[Bash Runtime] Stage 6: Recording final state into snapshot..."
+mkdir -p "${snapDir}"
+chmod 755 "${snapDir}"
+cp "${tmpMeta}" "${snapDir}/snapshot_metadata.json"
+chmod 644 "${snapDir}/snapshot_metadata.json"
+
+if [ -n "${snapMeta.default_grub_backup}" ] && [ "${snapMeta.default_grub_backup}" != "null" ] && [ -f "${defTarget}" ]; then cp "${defTarget}" "${snapMeta.default_grub_backup}"; chmod 644 "${snapMeta.default_grub_backup}"; fi
+if [ -n "${snapMeta.grub_cfg_backup}" ] && [ "${snapMeta.grub_cfg_backup}" != "null" ] && [ -f "${cfgTarget}" ]; then cp "${cfgTarget}" "${snapMeta.grub_cfg_backup}"; chmod 644 "${snapMeta.grub_cfg_backup}"; fi
+if [ -n "${snapMeta.bls_entries_backup}" ] && [ "${snapMeta.bls_entries_backup}" != "null" ] && [ -f "${overridesPath}" ]; then cp "${overridesPath}" "${snapMeta.bls_entries_backup}"; chmod 644 "${snapMeta.bls_entries_backup}"; fi
 
 echo "[Bash Runtime] Execution completed successfully!"
 `;

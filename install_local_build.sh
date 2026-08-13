@@ -41,6 +41,7 @@ rm -rf /opt/grubeditor
 cp -r release/linux-unpacked /opt/grubeditor
 
 mkdir -p /var/lib/grub-editor/backups
+chmod 755 /var/lib/grub-editor
 chmod 755 /var/lib/grub-editor/backups
 
 install -m 0644 packaging/io.grubeditor.helper.policy "/usr/share/polkit-1/actions/io.grubeditor.helper.policy"

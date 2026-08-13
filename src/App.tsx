@@ -307,7 +307,7 @@ export default function App() {
               </div>
             </Dialog.Title>
             <Dialog.Description className="text-sm text-slate-300 pt-5 leading-relaxed font-medium">
-              Before committing bootloader modifications to root partitions, please provide a descriptive title for this recovery checkpoint:
+              Before committing your new modifications, the system will capture a complete snapshot of your <strong className="text-emerald-400 font-bold">current, unmodified boot state</strong>. Please provide a descriptive title for this pre-deployment recovery checkpoint:
             </Dialog.Description>
             <div className="my-5">
               <input

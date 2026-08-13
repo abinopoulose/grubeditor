@@ -121,55 +121,128 @@ export const SnapshotsPanel: React.FC<SnapshotsPanelProps> = ({ onRestore, logAc
   const renderBootEntriesDiff = () => {
     if (!viewingSnapshot) return null;
     const { details, liveEntries } = viewingSnapshot;
-    const snapOverrides: BootEntry[] = details.bootEntries || [];
+    const snapEntries: BootEntry[] = details.snapEntries || [];
     
-    if (snapOverrides.length === 0) {
-      return <div className="text-slate-400 text-sm italic py-2">No boot menu overrides in this checkpoint.</div>;
+    if (!snapEntries || snapEntries.length === 0) {
+      return <div className="text-slate-400 text-sm italic py-2">Loading full boot menu state...</div>;
     }
 
-    // Filter to ONLY show entries that are actually different from the base system
-    const changedOverrides = snapOverrides.filter((override) => {
-      const live = liveEntries.find((e: any) => e.id === override.id);
-      const baseTitle = override.originalTitle || (live ? live.originalTitle : null) || (live ? live.title : '(default)');
-      const baseHidden = false;
-      return (override.title !== baseTitle) || (override.deleted !== baseHidden);
+    const changes: any[] = [];
+    const handledSnapIds = new Set();
+
+    liveEntries.forEach((live: any) => {
+      const snap = snapEntries.find((s: any) => s.id === live.id);
+      
+      const liveTitle = live.title;
+      const liveDeleted = live.deleted || live.enabled === false;
+
+      if (!snap) {
+        changes.push({
+          type: 'removed',
+          id: live.id,
+          label: live.originalTitle || live.title,
+          liveTitle,
+          snapTitle: null,
+          liveDeleted,
+          snapDeleted: null,
+          args: live.args
+        });
+      } else {
+        handledSnapIds.add(snap.id);
+        const snapTitle = snap.title;
+        const snapDeleted = snap.deleted || snap.enabled === false;
+        
+        if (liveTitle !== snapTitle || liveDeleted !== snapDeleted) {
+          changes.push({
+            type: 'changed',
+            id: live.id,
+            label: snap.originalTitle || live.originalTitle || snap.title,
+            liveTitle,
+            snapTitle,
+            liveDeleted,
+            snapDeleted,
+            args: snap.args
+          });
+        }
+      }
     });
 
-    if (changedOverrides.length === 0) {
-      return <div className="text-slate-400 text-sm italic py-2">No boot entry changes exist in this checkpoint compared to system defaults.</div>;
+    snapEntries.forEach((snap: any) => {
+      if (!handledSnapIds.has(snap.id)) {
+        changes.push({
+          type: 'added',
+          id: snap.id,
+          label: snap.originalTitle || snap.title,
+          liveTitle: null,
+          snapTitle: snap.title,
+          liveDeleted: null,
+          snapDeleted: snap.deleted || snap.enabled === false,
+          args: snap.args || snap.options
+        });
+      }
+    });
+
+    if (changes.length === 0) {
+      return <div className="text-slate-400 text-sm italic py-2">No boot menu changes will occur upon rollback.</div>;
     }
 
     return (
       <div className="space-y-2">
-        {changedOverrides.map((override, idx) => {
-          const live = liveEntries.find((e: any) => e.id === override.id);
-          const baseTitle = override.originalTitle || (live ? live.originalTitle : null) || (live ? live.title : '(default)');
-          const baseHidden = false;
-          
-          const titleChanged = override.title !== baseTitle;
-          const hiddenChanged = override.deleted !== baseHidden;
+        {changes.map((c, idx) => {
+          const titleChanged = c.type === 'changed' && c.liveTitle !== c.snapTitle;
+          const hiddenChanged = c.type === 'changed' && c.liveDeleted !== c.snapDeleted;
+
+          const bgClass = c.type === 'added' ? 'bg-emerald-900/20 border-emerald-500/30' : 
+                          c.type === 'removed' ? 'bg-rose-900/20 border-rose-500/30' : 
+                          'bg-indigo-900/20 border-indigo-500/30';
 
           return (
-            <div key={override.id} className="p-3 rounded-lg border flex flex-col gap-2 text-sm bg-indigo-900/20 border-indigo-500/30">
-              <div className="font-bold text-slate-200">
-                {idx + 1}. {baseTitle}
+            <div key={c.id} className={`p-3 rounded-lg border flex flex-col gap-2 text-sm ${bgClass}`}>
+              <div className="font-bold flex items-center justify-between text-slate-200">
+                <span className="truncate">{idx + 1}. {c.label}</span>
+                {c.type === 'added' && <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold uppercase tracking-wider shrink-0">Restoring</span>}
+                {c.type === 'removed' && <span className="text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 font-bold uppercase tracking-wider shrink-0">Removing</span>}
               </div>
               <div className="pl-4 flex flex-col gap-1">
-                {titleChanged && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-400 w-16">Title:</span>
-                    <span className="truncate max-w-[150px] text-rose-400/80">{baseTitle}</span>
-                    <span className="text-slate-500 font-bold">{'->'}</span>
-                    <span className="font-bold truncate text-emerald-400">{override.title || baseTitle}</span>
+                {c.type === 'added' && (
+                  <>
+                    <div className="flex items-start gap-2">
+                      <span className="text-slate-400 w-16 shrink-0 mt-0.5">Title:</span>
+                      <span className="font-bold text-emerald-400">{c.snapTitle}</span>
+                    </div>
+                    {c.args && (
+                      <div className="flex items-start gap-2">
+                        <span className="text-slate-400 w-16 shrink-0 mt-0.5">Args:</span>
+                        <span className="font-mono text-[10px] text-emerald-500/80 break-all">{c.args}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+                {c.type === 'removed' && (
+                  <div className="flex items-start gap-2">
+                    <span className="text-slate-400 w-16 shrink-0 mt-0.5">Title:</span>
+                    <span className="font-bold text-rose-400 line-through">{c.liveTitle}</span>
                   </div>
                 )}
-                {hiddenChanged && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-400 w-16">State:</span>
-                    <span className="text-rose-400/80">Visible</span>
-                    <span className="text-slate-500 font-bold">{'->'}</span>
-                    <span className="font-bold text-emerald-400">{override.deleted ? 'Hidden' : 'Visible'}</span>
-                  </div>
+                {c.type === 'changed' && (
+                  <>
+                    {titleChanged && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-400 w-16 shrink-0">Title:</span>
+                        <span className="truncate max-w-[150px] text-rose-400/80">{c.liveTitle}</span>
+                        <span className="text-slate-500 font-bold">{'->'}</span>
+                        <span className="font-bold truncate text-emerald-400">{c.snapTitle}</span>
+                      </div>
+                    )}
+                    {hiddenChanged && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-400 w-16 shrink-0">State:</span>
+                        <span className="text-rose-400/80">{c.liveDeleted ? 'Hidden' : 'Active'}</span>
+                        <span className="text-slate-500 font-bold">{'->'}</span>
+                        <span className="font-bold text-emerald-400">{c.snapDeleted ? 'Hidden' : 'Active'}</span>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
