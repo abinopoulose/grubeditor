@@ -726,8 +726,19 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
             logError('GET /api/snapshot-details', 'Failed to read bls_entries_backup', e);
           }
         }
+
+        let snapEntries: any[] = [];
+        if (snapData.grub_cfg_backup) {
+          try {
+            const grubCfgContent = readProtectedFile(snapData.grub_cfg_backup);
+            const parsedSysEntries = parseGrubCfg(grubCfgContent);
+            snapEntries = mergeEntriesWithOverrides(parsedSysEntries, bootEntries);
+          } catch (e) {
+             logError('GET /api/snapshot-details', 'Failed to parse snapshot grub_cfg', e);
+          }
+        }
         
-        res.end(JSON.stringify({ config, bootEntries }));
+        res.end(JSON.stringify({ config, bootEntries, snapEntries }));
       } catch (e: any) {
         res.statusCode = 500;
         res.end(JSON.stringify({ error: e.message }));
@@ -812,28 +823,42 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
               createServerSnapshot(`Auto-backup before restoring snapshot from ${new Date(timestamp).toLocaleString()}`);
 
               try {
+                const isRoot = process.getuid ? process.getuid() === 0 : false;
+                const scriptPath = `/tmp/grub-editor-restore-script-${Date.now()}.sh`;
+                let bashScript = `#!/bin/bash\nset -e\nset -x\n`;
+
                 if (snapData.default_grub_backup && fs.existsSync(snapData.default_grub_backup)) {
                   const defTarget = fs.existsSync('/etc/default/grub') ? '/etc/default/grub' : '/boot/grub/default';
-                  writeProtectedFile(defTarget, readProtectedFile(snapData.default_grub_backup));
-                  delete fileCache['/etc/default/grub'];
-                  delete fileCache['/boot/grub/default'];
+                  bashScript += `cp "${snapData.default_grub_backup}" "${defTarget}"\nchmod 644 "${defTarget}"\n`;
                 }
                 if (snapData.grub_cfg_backup && fs.existsSync(snapData.grub_cfg_backup)) {
                   const cfgTarget = fs.existsSync('/boot/grub2/grub.cfg') ? '/boot/grub2/grub.cfg' : '/boot/grub/grub.cfg';
-                  writeProtectedFile(cfgTarget, readProtectedFile(snapData.grub_cfg_backup));
-                  delete fileCache['/boot/grub/grub.cfg'];
-                  delete fileCache['/boot/grub2/grub.cfg'];
+                  bashScript += `cp "${snapData.grub_cfg_backup}" "${cfgTarget}"\nchmod 644 "${cfgTarget}"\n`;
                 }
                 
-                let hasOverridesBackup = false;
+                const overridesTarget = getOverridesPath();
+                const overridesDir = path.dirname(overridesTarget);
+                bashScript += `mkdir -p "${overridesDir}"\nchmod 755 "${overridesDir}"\n`;
                 if (snapData.bls_entries_backup && fs.existsSync(snapData.bls_entries_backup)) {
-                  const content = readProtectedFile(snapData.bls_entries_backup);
-                  writeProtectedFile(getOverridesPath(), content);
-                  hasOverridesBackup = true;
+                  bashScript += `cp "${snapData.bls_entries_backup}" "${overridesTarget}"\nchmod 644 "${overridesTarget}"\n`;
+                } else {
+                  bashScript += `echo "[]" > "${overridesTarget}"\nchmod 644 "${overridesTarget}"\n`;
                 }
-                if (!hasOverridesBackup) {
-                  writeProtectedFile(getOverridesPath(), '[]');
-                }
+
+                fs.writeFileSync(scriptPath, bashScript, 'utf8');
+                log('POST /api/restore-snapshot', 'Executing Batched Restore Script...');
+                
+                const cmdArgs = isRoot ? ['bash', scriptPath] : ['/usr/bin/grub-editor-helper', 'bash', scriptPath];
+                const cmdExec = isRoot ? 'bash' : 'pkexec';
+                
+                execSync(`${cmdExec} ${cmdArgs.join(' ')}`, { stdio: 'ignore' });
+                try { if (fs.existsSync(scriptPath)) fs.unlinkSync(scriptPath); } catch {}
+                
+                delete fileCache['/etc/default/grub'];
+                delete fileCache['/boot/grub/default'];
+                delete fileCache['/boot/grub/grub.cfg'];
+                delete fileCache['/boot/grub2/grub.cfg'];
+                delete fileCache[overridesTarget];
                 
                 log('POST /api/restore-snapshot', 'Restore completed successfully');
                 res.end(JSON.stringify({ success: true }));

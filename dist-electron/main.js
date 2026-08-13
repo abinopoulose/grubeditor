@@ -1,373 +1,373 @@
-import { app as W, BrowserWindow as X, Menu as te } from "electron";
-import * as y from "node:path";
-import * as c from "node:fs";
-import * as ne from "node:http";
-import { fileURLToPath as ie } from "node:url";
+import { app as W, BrowserWindow as Y, Menu as ne } from "electron";
+import * as S from "node:path";
+import * as l from "node:fs";
+import * as ie from "node:http";
+import { fileURLToPath as re } from "node:url";
 import * as U from "node:os";
-import { execSync as D, spawn as re } from "node:child_process";
-const Y = "[GrubEditor API]";
-function b(r, ...a) {
-  console.log(`${Y} [${r}]`, ...a);
+import { execSync as D, spawn as se } from "node:child_process";
+const Q = "[GrubEditor API]";
+function m(i, ...d) {
+  console.log(`${Q} [${i}]`, ...d);
 }
-function R(r, ...a) {
-  console.error(`${Y} [${r}] ERROR:`, ...a);
+function P(i, ...d) {
+  console.error(`${Q} [${i}] ERROR:`, ...d);
 }
-const k = {};
-function O(r, a = 5e3) {
-  const h = Date.now();
-  if (k[r] && h - k[r].timestamp < a)
-    return k[r].data;
-  let g = "";
+const _ = {};
+function v(i, d = 5e3) {
+  const b = Date.now();
+  if (_[i] && b - _[i].timestamp < d)
+    return _[i].data;
+  let p = "";
   try {
-    g = c.readFileSync(r, "utf8");
-  } catch (p) {
-    if (p.code === "ENOENT")
-      throw new Error(`File not found: ${r}`);
+    p = l.readFileSync(i, "utf8");
+  } catch (f) {
+    if (f.code === "ENOENT")
+      throw new Error(`File not found: ${i}`);
     try {
-      g = D(`pkexec /usr/bin/grub-editor-helper cat "${r}"`, { encoding: "utf8" });
+      p = D(`pkexec /usr/bin/grub-editor-helper cat "${i}"`, { encoding: "utf8" });
     } catch {
-      throw new Error(`File not found or unreadable: ${r}`);
+      throw new Error(`File not found or unreadable: ${i}`);
     }
   }
-  return k[r] = { data: g, timestamp: h }, g;
+  return _[i] = { data: p, timestamp: b }, p;
 }
-function se(r) {
-  const a = [], h = U.release().trim(), g = r.split(`
+function Z(i) {
+  const d = [], b = U.release().trim(), p = i.split(`
 `);
-  let p, e = !1;
-  for (let o = 0; o < g.length; o++) {
-    const s = g[o].trim();
-    if (s.startsWith("submenu ") || s.startsWith("submenu	")) {
-      e = !0, s.match(/^submenu\s+((?:['"])(.*?)(?:['"])|(\S+))/) && (p = `submenu-${o}`);
+  let f, e = !1;
+  for (let o = 0; o < p.length; o++) {
+    const r = p[o].trim();
+    if (r.startsWith("submenu ") || r.startsWith("submenu	")) {
+      e = !0, r.match(/^submenu\s+((?:['"])(.*?)(?:['"])|(\S+))/) && (f = `submenu-${o}`);
       continue;
     }
-    if (e && s === "}") {
-      e = !1, p = void 0;
+    if (e && r === "}") {
+      e = !1, f = void 0;
       continue;
     }
-    if (s.startsWith("menuentry ") || s.startsWith("menuentry	")) {
+    if (r.startsWith("menuentry ") || r.startsWith("menuentry	")) {
       let n = "Unknown Entry";
-      const t = s.match(/^menuentry\s+(?:['"](.*?)['"]|(\S+))/);
+      const t = r.match(/^menuentry\s+(?:['"](.*?)['"]|(\S+))/);
       t && (n = t[1] || t[2] || "Unknown Entry");
-      let u = `sys-entry-${a.length}`;
-      const i = s.match(/(?:--id|\$menuentry_id_option)\s+(?:['"](.*?)['"]|(\S+))/);
-      i && (u = i[1] || i[2] || u);
-      let l = "", d = (s.match(/\{/g) || []).length - (s.match(/\}/g) || []).length, f = o + 1;
-      for (; f < g.length && (d > 0 || d === 0 && !g[f].includes("{")); ) {
-        const w = g[f];
-        if (l += w + `
-`, d += (w.match(/\{/g) || []).length - (w.match(/\}/g) || []).length, d <= 0 && w.includes("}")) break;
-        f++;
+      let u = `sys-entry-${d.length}`;
+      const s = r.match(/(?:--id|\$menuentry_id_option)\s+(?:['"](.*?)['"]|(\S+))/);
+      s && (u = s[1] || s[2] || u);
+      let a = "", g = (r.match(/\{/g) || []).length - (r.match(/\}/g) || []).length, c = o + 1;
+      for (; c < p.length && (g > 0 || g === 0 && !p[c].includes("{")); ) {
+        const x = p[c];
+        if (a += x + `
+`, g += (x.match(/\{/g) || []).length - (x.match(/\}/g) || []).length, g <= 0 && x.includes("}")) break;
+        c++;
       }
-      o = f;
-      let m = "custom", _, $, x = !1;
-      const S = n.toLowerCase();
-      S.includes("recovery") || S.includes("advanced") || S.includes("rescue") || l.toLowerCase().includes("recovery") || l.toLowerCase().includes("single") ? m = "recovery" : S.includes("windows") || l.toLowerCase().includes("chainloader") ? m = "windows" : S.includes("uefi") || S.includes("firmware") || l.toLowerCase().includes("fwsetup") ? m = "efi" : (S.includes("linux") || S.includes("ubuntu") || S.includes("debian") || S.includes("fedora") || l.includes("linux ") || l.includes("linuxefi ") || l.includes("linux16 ")) && (m = "linux");
-      const T = l.match(/^\s*(?:linux|linuxefi|linux16)\s+(\S+)(.*)$/m);
-      if (T) {
-        const w = T[1];
-        _ = T[2].trim(), m !== "recovery" && m !== "windows" && m !== "efi" && (m = "linux");
-        const E = w.match(/vmlinuz-([a-zA-Z0-9.\-_]+)/i) || w.match(/kernel-([a-zA-Z0-9.\-_]+)/i);
-        E && ($ = E[1]);
+      o = c;
+      let h = "custom", k, y, w = !1;
+      const $ = n.toLowerCase();
+      $.includes("recovery") || $.includes("advanced") || $.includes("rescue") || a.toLowerCase().includes("recovery") || a.toLowerCase().includes("single") ? h = "recovery" : $.includes("windows") || a.toLowerCase().includes("chainloader") ? h = "windows" : $.includes("uefi") || $.includes("firmware") || a.toLowerCase().includes("fwsetup") ? h = "efi" : ($.includes("linux") || $.includes("ubuntu") || $.includes("debian") || $.includes("fedora") || a.includes("linux ") || a.includes("linuxefi ") || a.includes("linux16 ")) && (h = "linux");
+      const E = a.match(/^\s*(?:linux|linuxefi|linux16)\s+(\S+)(.*)$/m);
+      if (E) {
+        const x = E[1];
+        k = E[2].trim(), h !== "recovery" && h !== "windows" && h !== "efi" && (h = "linux");
+        const T = x.match(/vmlinuz-([a-zA-Z0-9.\-_]+)/i) || x.match(/kernel-([a-zA-Z0-9.\-_]+)/i);
+        T && (y = T[1]);
       }
-      if (!$) {
-        const w = n.match(/\b(\d+\.\d+(?:\.\d+)?(?:-[a-zA-Z0-9]+)*)\b/);
-        w && ($ = w[1]);
+      if (!y) {
+        const x = n.match(/\b(\d+\.\d+(?:\.\d+)?(?:-[a-zA-Z0-9]+)*)\b/);
+        x && (y = x[1]);
       }
-      ($ && $.includes(h) || n.includes(h) || h.length > 3 && ($ === h || n.includes(h))) && (x = !0), a.push({
+      (y && y.includes(b) || n.includes(b) || b.length > 3 && (y === b || n.includes(b))) && (w = !0), d.push({
         id: u,
         title: n,
-        type: m,
+        type: h,
         enabled: !0,
-        order: a.length,
-        args: _ || void 0,
-        version: $ || void 0,
-        isCurrent: x,
-        is_current: x,
-        is_default: a.length === 0,
-        parent_id: p,
-        raw_boot_commands: l.trim()
+        order: d.length,
+        args: k || void 0,
+        version: y || void 0,
+        isCurrent: w,
+        is_current: w,
+        is_default: d.length === 0,
+        parent_id: f,
+        raw_boot_commands: a.trim()
       });
     }
   }
-  return a;
+  return d;
 }
-function G() {
-  const r = "/var/lib/grub-editor";
+function N() {
+  const i = "/var/lib/grub-editor";
   try {
-    c.existsSync(r) || process.getuid && process.getuid() === 0 && (c.mkdirSync(r, { recursive: !0 }), c.chmodSync(r, 493));
+    l.existsSync(i) || process.getuid && process.getuid() === 0 && (l.mkdirSync(i, { recursive: !0 }), l.chmodSync(i, 493));
   } catch {
   }
-  return y.join(r, "grub-editor-entries.json");
+  return S.join(i, "grub-editor-entries.json");
 }
-function C(r, a) {
+function G(i, d) {
   try {
-    const h = y.dirname(r);
-    c.existsSync(h) || c.mkdirSync(h, { recursive: !0 }), c.writeFileSync(r, a, "utf8");
+    const b = S.dirname(i);
+    l.existsSync(b) || l.mkdirSync(b, { recursive: !0 }), l.writeFileSync(i, d, "utf8");
   } catch {
-    const h = y.join(U.tmpdir(), `grub-write-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`);
-    c.writeFileSync(h, a, "utf8");
+    const b = S.join(U.tmpdir(), `grub-write-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`);
+    l.writeFileSync(b, d, "utf8");
     try {
-      D(`pkexec /usr/bin/grub-editor-helper sh -c "mkdir -p '$(dirname "${r}")' && chmod 755 '$(dirname "${r}")' && cp '${h}' '${r}' && chmod 0644 '${r}'"`, { stdio: "ignore" });
-    } catch (g) {
-      throw console.error(`Failed to write ${r} via pkexec:`, g.message), new Error(`Cannot write to ${r}: permission denied or authentication dismissed.`);
+      D(`pkexec /usr/bin/grub-editor-helper sh -c "mkdir -p '$(dirname "${i}")' && chmod 755 '$(dirname "${i}")' && cp '${b}' '${i}' && chmod 0644 '${i}'"`, { stdio: "ignore" });
+    } catch (p) {
+      throw console.error(`Failed to write ${i} via pkexec:`, p.message), new Error(`Cannot write to ${i}: permission denied or authentication dismissed.`);
     } finally {
-      if (c.existsSync(h)) try {
-        c.unlinkSync(h);
+      if (l.existsSync(b)) try {
+        l.unlinkSync(b);
       } catch {
       }
     }
   }
-  delete k[r];
+  delete _[i];
 }
 function I() {
   try {
-    const r = G(), a = O(r, 0);
-    return JSON.parse(a);
+    const i = N(), d = v(i, 0);
+    return JSON.parse(d);
   } catch {
     return [];
   }
 }
-function z(r, a) {
-  if (b("MERGE", `Starting merge: ${r.length} system entries, ${a.length} overrides`), !a || !Array.isArray(a) || a.length === 0)
-    return b("MERGE", "No overrides found, returning raw system entries"), r;
-  const h = /* @__PURE__ */ new Set();
-  r.forEach((e) => {
+function H(i, d) {
+  if (m("MERGE", `Starting merge: ${i.length} system entries, ${d.length} overrides`), !d || !Array.isArray(d) || d.length === 0)
+    return m("MERGE", "No overrides found, returning raw system entries"), i;
+  const b = /* @__PURE__ */ new Set();
+  i.forEach((e) => {
     e.originalTitle || (e.originalTitle = e.title);
-  }), b("MERGE", "System entries:", r.map((e, o) => `[${o}] id="${e.id}" title="${e.title}"`).join(" | ")), b("MERGE", "Overrides:", a.map((e, o) => `[${o}] id="${e.id}" title="${e.title}" origTitle="${e.originalTitle}" deleted=${e.deleted}`).join(" | "));
-  const g = [];
-  a.forEach((e, o) => {
-    let s = r.findIndex((t, u) => !h.has(u) && e.id && t.id === e.id && !t.id.startsWith("sys-entry-")), n = "id";
-    if (s === -1 && (s = r.findIndex((t, u) => {
-      if (h.has(u)) return !1;
-      const i = t.originalTitle || t.title, l = e.originalTitle || e.title;
-      return l === t.title || l === i || e.title === t.title;
-    }), n = "title"), s === -1 && e.id && e.id.startsWith("sys-entry-")) {
+  }), m("MERGE", "System entries:", i.map((e, o) => `[${o}] id="${e.id}" title="${e.title}"`).join(" | ")), m("MERGE", "Overrides:", d.map((e, o) => `[${o}] id="${e.id}" title="${e.title}" origTitle="${e.originalTitle}" deleted=${e.deleted}`).join(" | "));
+  const p = [];
+  d.forEach((e, o) => {
+    let r = i.findIndex((t, u) => !b.has(u) && e.id && t.id === e.id && !t.id.startsWith("sys-entry-")), n = "id";
+    if (r === -1 && (r = i.findIndex((t, u) => {
+      if (b.has(u)) return !1;
+      const s = t.originalTitle || t.title, a = e.originalTitle || e.title;
+      return a === t.title || a === s || e.title === t.title;
+    }), n = "title"), r === -1 && e.id && e.id.startsWith("sys-entry-")) {
       const t = parseInt(e.id.replace("sys-entry-", ""), 10);
-      !isNaN(t) && t < r.length && !h.has(t) && (s = t, n = "positional");
+      !isNaN(t) && t < i.length && !b.has(t) && (r = t, n = "positional");
     }
-    if (s !== -1 ? (h.add(s), b("MERGE", `Override[${o}] "${e.title}" matched system[${s}] "${r[s].title}" via ${n}`)) : b("MERGE", `Override[${o}] "${e.title}" (origTitle="${e.originalTitle}", id="${e.id}") had NO match in system entries`), e.deleted) {
-      if (g.some(
+    if (r !== -1 ? (b.add(r), m("MERGE", `Override[${o}] "${e.title}" matched system[${r}] "${i[r].title}" via ${n}`)) : m("MERGE", `Override[${o}] "${e.title}" (origTitle="${e.originalTitle}", id="${e.id}") had NO match in system entries`), e.deleted) {
+      if (p.some(
         (u) => e.id && u.id === e.id && !u.id.startsWith("sys-") && !e.id.startsWith("sys-") || (e.originalTitle || e.title) === (u.originalTitle || u.title)
       )) {
-        b("MERGE", `Override[${o}] "${e.title}" is a DUPLICATE deleted override — skipping`);
+        m("MERGE", `Override[${o}] "${e.title}" is a DUPLICATE deleted override — skipping`);
         return;
       }
-      b("MERGE", `Override[${o}] "${e.title}" is DELETED (${s !== -1 ? "matched & suppressed system entry" : "preserved deleted override from previous deploy"})`), g.push({ ...e, deleted: !0, enabled: !1 });
-    } else if (s !== -1) {
-      const t = r[s];
-      g.push({
+      m("MERGE", `Override[${o}] "${e.title}" is DELETED (${r !== -1 ? "matched & suppressed system entry" : "preserved deleted override from previous deploy"})`), p.push({ ...e, deleted: !0, enabled: !1 });
+    } else if (r !== -1) {
+      const t = i[r];
+      p.push({
         ...t,
         title: e.title !== void 0 ? e.title : t.title,
         originalTitle: e.originalTitle || t.originalTitle || t.title,
         enabled: e.enabled !== void 0 ? e.enabled : t.enabled,
         deleted: !1,
-        order: g.length
+        order: p.length
       });
     } else
-      g.push({ ...e, deleted: !1, order: g.length });
+      p.push({ ...e, deleted: !1, order: p.length });
   });
-  let p = 0;
-  return r.forEach((e, o) => {
-    h.has(o) || (p++, b("MERGE", `System entry[${o}] "${e.title}" was UNMATCHED — adding to result`), g.push({
+  let f = 0;
+  return i.forEach((e, o) => {
+    b.has(o) || (f++, m("MERGE", `System entry[${o}] "${e.title}" was UNMATCHED — adding to result`), p.push({
       ...e,
       originalTitle: e.originalTitle || e.title,
-      order: g.length
+      order: p.length
     }));
-  }), b("MERGE", `Merge complete: ${g.length} total entries (${p} unmatched system entries added)`), g;
+  }), m("MERGE", `Merge complete: ${p.length} total entries (${f} unmatched system entries added)`), p;
 }
-function Z(r, a) {
-  if (!a || !Array.isArray(a) || a.length === 0) return r;
-  const h = r.split(`
-`), g = [], p = [];
-  let e = -1, o = 0, s = 0;
-  for (; o < h.length; ) {
-    const i = h[o], l = i.trim();
-    if (l.startsWith("submenu ") || l.startsWith("submenu	")) {
-      e === -1 && (e = g.length), o++;
+function K(i, d) {
+  if (!d || !Array.isArray(d) || d.length === 0) return i;
+  const b = i.split(`
+`), p = [], f = [];
+  let e = -1, o = 0, r = 0;
+  for (; o < b.length; ) {
+    const s = b[o], a = s.trim();
+    if (a.startsWith("submenu ") || a.startsWith("submenu	")) {
+      e === -1 && (e = p.length), o++;
       continue;
     }
-    if (l === "}" && e !== -1 && g.length >= e) {
+    if (a === "}" && e !== -1 && p.length >= e) {
       o++;
       continue;
     }
-    if (l.startsWith("menuentry ") || l.startsWith("menuentry	")) {
-      e === -1 && (e = g.length);
-      let d = "Unknown Entry";
-      const f = l.match(/^menuentry\s+(?:['"](.*?)['"]|(\S+))/);
-      f && (d = f[1] || f[2] || d);
-      let m = `sys-entry-${s}`;
-      const _ = l.match(/(?:--id|\$menuentry_id_option)\s+(?:['"](.*?)['"]|(\S+))/);
-      _ && (m = _[1] || _[2] || m);
-      const $ = [i];
-      let x = (i.match(/\{/g) || []).length - (i.match(/\}/g) || []).length, S = o + 1;
-      for (; S < h.length && (x > 0 || x === 0 && !h[S].includes("{")); ) {
-        const T = h[S];
-        if ($.push(T), x += (T.match(/\{/g) || []).length - (T.match(/\}/g) || []).length, x <= 0 && T.includes("}")) {
-          S++;
+    if (a.startsWith("menuentry ") || a.startsWith("menuentry	")) {
+      e === -1 && (e = p.length);
+      let g = "Unknown Entry";
+      const c = a.match(/^menuentry\s+(?:['"](.*?)['"]|(\S+))/);
+      c && (g = c[1] || c[2] || g);
+      let h = `sys-entry-${r}`;
+      const k = a.match(/(?:--id|\$menuentry_id_option)\s+(?:['"](.*?)['"]|(\S+))/);
+      k && (h = k[1] || k[2] || h);
+      const y = [s];
+      let w = (s.match(/\{/g) || []).length - (s.match(/\}/g) || []).length, $ = o + 1;
+      for (; $ < b.length && (w > 0 || w === 0 && !b[$].includes("{")); ) {
+        const E = b[$];
+        if (y.push(E), w += (E.match(/\{/g) || []).length - (E.match(/\}/g) || []).length, w <= 0 && E.includes("}")) {
+          $++;
           break;
         }
-        S++;
+        $++;
       }
-      p.push({ id: m, title: d, lines: $, origIdx: s }), s++, o = S;
+      f.push({ id: h, title: g, lines: y, origIdx: r }), r++, o = $;
       continue;
     }
-    g.push(i), o++;
+    p.push(s), o++;
   }
-  if (e === -1 || p.length === 0) return r;
+  if (e === -1 || f.length === 0) return i;
   const n = [], t = /* @__PURE__ */ new Set();
-  a.forEach((i, l) => {
-    let d = p.findIndex((f, m) => !t.has(m) && i.id && f.id === i.id && !f.id.startsWith("sys-entry-"));
-    if (d === -1 && (d = p.findIndex((f, m) => !t.has(m) && (i.originalTitle === f.title || i.title === f.title))), d === -1 && i.id && i.id.startsWith("sys-entry-")) {
-      const f = parseInt(i.id.replace("sys-entry-", ""), 10);
-      !isNaN(f) && !t.has(f) && (d = f);
+  d.forEach((s, a) => {
+    let g = f.findIndex((c, h) => !t.has(h) && s.id && c.id === s.id && !c.id.startsWith("sys-entry-"));
+    if (g === -1 && (g = f.findIndex((c, h) => !t.has(h) && (s.originalTitle === c.title || s.title === c.title))), g === -1 && s.id && s.id.startsWith("sys-entry-")) {
+      const c = parseInt(s.id.replace("sys-entry-", ""), 10);
+      !isNaN(c) && !t.has(c) && (g = c);
     }
-    if (d !== -1 && t.add(d), !(i.deleted || i.enabled === !1) && d !== -1) {
-      const f = p[d];
-      let m = f.lines[0];
-      i.title && i.title !== f.title && (m = m.replace(f.title, i.title), f.lines[0] = m), n.push({ idx: l, text: f.lines.join(`
+    if (g !== -1 && t.add(g), !(s.deleted || s.enabled === !1) && g !== -1) {
+      const c = f[g];
+      let h = c.lines[0];
+      s.title && s.title !== c.title && (h = h.replace(c.title, s.title), c.lines[0] = h), n.push({ idx: a, text: c.lines.join(`
 `) });
     }
-  }), p.forEach((i, l) => {
-    t.has(l) || n.push({ idx: n.length + 1e3, text: i.lines.join(`
+  }), f.forEach((s, a) => {
+    t.has(a) || n.push({ idx: n.length + 1e3, text: s.lines.join(`
 `) });
-  }), n.sort((i, l) => i.idx - l.idx);
-  const u = n.map((i) => i.text).join(`
+  }), n.sort((s, a) => s.idx - a.idx);
+  const u = n.map((s) => s.text).join(`
 
 `);
-  return g.splice(e, 0, u), g.join(`
+  return p.splice(e, 0, u), p.join(`
 `);
 }
-function A() {
-  const r = "/var/lib/grub-editor/backups";
-  if (process.getuid && process.getuid() === 0 && !c.existsSync(r))
+function M() {
+  const i = "/var/lib/grub-editor/backups";
+  if (process.getuid && process.getuid() === 0 && !l.existsSync(i))
     try {
-      c.mkdirSync(r, { recursive: !0 }), c.chmodSync("/var/lib/grub-editor", 493), c.chmodSync(r, 493);
+      l.mkdirSync(i, { recursive: !0 }), l.chmodSync("/var/lib/grub-editor", 493), l.chmodSync(i, 493);
     } catch {
     }
-  return r;
+  return i;
 }
-function H(r) {
-  const a = A(), h = Date.now(), g = `snap_${h}`, p = y.join(a, g);
+function V(i) {
+  const d = M(), b = Date.now(), p = `snap_${b}`, f = S.join(d, p);
   try {
-    c.existsSync(p) || c.mkdirSync(p, { recursive: !0 });
+    l.existsSync(f) || l.mkdirSync(f, { recursive: !0 });
   } catch {
     try {
-      D(`pkexec /usr/bin/grub-editor-helper mkdir -p "${p}" && pkexec /usr/bin/grub-editor-helper chmod 755 "${p}"`);
-    } catch (f) {
-      return R("SNAPSHOT", "Could not create snapshot dir:", f.message), null;
+      D(`pkexec /usr/bin/grub-editor-helper mkdir -p "${f}" && pkexec /usr/bin/grub-editor-helper chmod 755 "${f}"`);
+    } catch (c) {
+      return P("SNAPSHOT", "Could not create snapshot dir:", c.message), null;
     }
   }
-  const e = c.existsSync("/etc/default/grub") ? "/etc/default/grub" : "/boot/grub/default", o = y.join(p, "default_grub.bak");
+  const e = l.existsSync("/etc/default/grub") ? "/etc/default/grub" : "/boot/grub/default", o = S.join(f, "default_grub.bak");
   try {
-    const f = O(e);
-    C(o, f);
-  } catch (f) {
-    R("SNAPSHOT", "Failed to backup default grub:", f);
+    const c = v(e);
+    G(o, c);
+  } catch (c) {
+    P("SNAPSHOT", "Failed to backup default grub:", c);
   }
-  const s = c.existsSync("/boot/grub2/grub.cfg") ? "/boot/grub2/grub.cfg" : "/boot/grub/grub.cfg";
+  const r = l.existsSync("/boot/grub2/grub.cfg") ? "/boot/grub2/grub.cfg" : "/boot/grub/grub.cfg";
   let n = null;
-  if (c.existsSync(s)) {
-    const f = y.join(p, "grub.cfg.bak");
+  if (l.existsSync(r)) {
+    const c = S.join(f, "grub.cfg.bak");
     try {
-      const m = O(s);
-      C(f, m), n = f;
-    } catch (m) {
-      R("SNAPSHOT", "Failed to backup grub.cfg:", m);
+      const h = v(r);
+      G(c, h), n = c;
+    } catch (h) {
+      P("SNAPSHOT", "Failed to backup grub.cfg:", h);
     }
   }
   let t = null;
-  const u = G();
-  if (c.existsSync(u)) {
-    const f = y.join(p, "grub-editor-entries.json.bak");
+  const u = N();
+  if (l.existsSync(u)) {
+    const c = S.join(f, "grub-editor-entries.json.bak");
     try {
-      const m = O(u);
-      C(f, m), t = f;
+      const h = v(u);
+      G(c, h), t = c;
     } catch {
     }
   }
-  const i = `${h} (UTC Timestamp)`, l = {
-    timestamp: h,
-    date_string: i,
-    description: r || "Auto-backup",
+  const s = `${b} (UTC Timestamp)`, a = {
+    timestamp: b,
+    date_string: s,
+    description: i || "Auto-backup",
     default_grub_backup: o,
     grub_cfg_backup: n,
     bls_entries_backup: t,
     warnings: []
-  }, d = y.join(p, "snapshot_metadata.json");
-  return C(d, JSON.stringify(l, null, 2)), b("SNAPSHOT", `Created recovery snapshot in ${p}: "${r}"`), l;
+  }, g = S.join(f, "snapshot_metadata.json");
+  return G(g, JSON.stringify(a, null, 2)), m("SNAPSHOT", `Created recovery snapshot in ${f}: "${i}"`), a;
 }
-async function oe(r, a) {
-  if (!r.url || !r.url.startsWith("/api/"))
+async function oe(i, d) {
+  if (!i.url || !i.url.startsWith("/api/"))
     return !1;
-  a.setHeader("Content-Type", "application/json");
+  d.setHeader("Content-Type", "application/json");
   try {
-    const h = new URL(r.url, `http://${r.headers.host || "localhost"}`), g = h.pathname;
-    if (r.method === "GET" && g === "/api/boot-entries") {
-      if (b("GET /api/boot-entries", "Fetching boot entries..."), c.existsSync("/boot/loader/entries"))
+    const b = new URL(i.url, `http://${i.headers.host || "localhost"}`), p = b.pathname;
+    if (i.method === "GET" && p === "/api/boot-entries") {
+      if (m("GET /api/boot-entries", "Fetching boot entries..."), l.existsSync("/boot/loader/entries"))
         try {
-          const t = c.readdirSync("/boot/loader/entries").filter((u) => u.endsWith(".conf") || u.endsWith(".mgnix"));
+          const t = l.readdirSync("/boot/loader/entries").filter((u) => u.endsWith(".conf") || u.endsWith(".mgnix"));
           if (t.length > 0) {
-            b("GET /api/boot-entries", `Found ${t.length} BLS entry files`);
-            const u = [], i = U.release().trim();
-            t.sort().forEach((f, m) => {
-              const _ = c.readFileSync(y.join("/boot/loader/entries", f), "utf8");
-              let $ = f, x = "", S = "";
-              _.split(`
-`).forEach((w) => {
-                const E = w.trim();
-                E.startsWith("title ") ? $ = E.substring(6).trim() : E.startsWith("version ") ? x = E.substring(8).trim() : E.startsWith("options ") && (S = E.substring(8).trim());
+            m("GET /api/boot-entries", `Found ${t.length} BLS entry files`);
+            const u = [], s = U.release().trim();
+            t.sort().forEach((c, h) => {
+              const k = l.readFileSync(S.join("/boot/loader/entries", c), "utf8");
+              let y = c, w = "", $ = "";
+              k.split(`
+`).forEach((x) => {
+                const T = x.trim();
+                T.startsWith("title ") ? y = T.substring(6).trim() : T.startsWith("version ") ? w = T.substring(8).trim() : T.startsWith("options ") && ($ = T.substring(8).trim());
               });
-              const T = x.includes(i) || $.includes(i);
+              const E = w.includes(s) || y.includes(s);
               u.push({
-                id: f.replace(/\.[^/.]+$/, ""),
-                title: $,
-                type: $.toLowerCase().includes("recovery") || $.toLowerCase().includes("rescue") ? "recovery" : "linux",
+                id: c.replace(/\.[^/.]+$/, ""),
+                title: y,
+                type: y.toLowerCase().includes("recovery") || y.toLowerCase().includes("rescue") ? "recovery" : "linux",
                 enabled: !0,
-                order: m,
-                args: S || void 0,
-                version: x || void 0,
-                isCurrent: T,
-                is_current: T,
-                is_default: m === 0
+                order: h,
+                args: $ || void 0,
+                version: w || void 0,
+                isCurrent: E,
+                is_current: E,
+                is_default: h === 0
               });
             });
-            const l = I();
-            b("GET /api/boot-entries", `Loaded ${l.length} saved overrides from ${G()}`);
-            const d = z(u, l);
-            return b("GET /api/boot-entries", `Returning ${d.length} entries (active: ${d.filter((f) => !f.deleted).length}, deleted: ${d.filter((f) => f.deleted).length})`), a.end(JSON.stringify(d)), !0;
+            const a = I();
+            m("GET /api/boot-entries", `Loaded ${a.length} saved overrides from ${N()}`);
+            const g = H(u, a);
+            return m("GET /api/boot-entries", `Returning ${g.length} entries (active: ${g.filter((c) => !c.deleted).length}, deleted: ${g.filter((c) => c.deleted).length})`), d.end(JSON.stringify(g)), !0;
           }
         } catch (t) {
-          R("GET /api/boot-entries", "BLS directory read error, falling back to grub.cfg:", t);
+          P("GET /api/boot-entries", "BLS directory read error, falling back to grub.cfg:", t);
         }
-      const p = c.existsSync("/boot/grub2/grub.cfg") ? "/boot/grub2/grub.cfg" : "/boot/grub/grub.cfg";
-      b("GET /api/boot-entries", `Reading grub.cfg from ${p}`);
-      const e = O(p), o = se(e);
-      b("GET /api/boot-entries", `Parsed ${o.length} menuentry blocks from grub.cfg`);
-      const s = I();
-      b("GET /api/boot-entries", `Loaded ${s.length} saved overrides from ${G()}`);
-      const n = z(o, s);
-      return b("GET /api/boot-entries", `Returning ${n.length} entries (active: ${n.filter((t) => !t.deleted).length}, deleted: ${n.filter((t) => t.deleted).length})`), a.end(JSON.stringify(n)), !0;
+      const f = l.existsSync("/boot/grub2/grub.cfg") ? "/boot/grub2/grub.cfg" : "/boot/grub/grub.cfg";
+      m("GET /api/boot-entries", `Reading grub.cfg from ${f}`);
+      const e = v(f), o = Z(e);
+      m("GET /api/boot-entries", `Parsed ${o.length} menuentry blocks from grub.cfg`);
+      const r = I();
+      m("GET /api/boot-entries", `Loaded ${r.length} saved overrides from ${N()}`);
+      const n = H(o, r);
+      return m("GET /api/boot-entries", `Returning ${n.length} entries (active: ${n.filter((t) => !t.deleted).length}, deleted: ${n.filter((t) => t.deleted).length})`), d.end(JSON.stringify(n)), !0;
     }
-    if (r.method === "GET" && g === "/api/grub-config") {
-      const p = c.existsSync("/etc/default/grub") ? "/etc/default/grub" : "/boot/grub/default", e = O(p), o = {};
+    if (i.method === "GET" && p === "/api/grub-config") {
+      const f = l.existsSync("/etc/default/grub") ? "/etc/default/grub" : "/boot/grub/default", e = v(f), o = {};
       return e.split(`
-`).forEach((s) => {
-        const n = s.trim();
+`).forEach((r) => {
+        const n = r.trim();
         if (n && !n.startsWith("#") && n.includes("=")) {
           const t = n.indexOf("="), u = n.substring(0, t).trim();
-          let i = n.substring(t + 1).trim();
-          (i.startsWith('"') && i.endsWith('"') || i.startsWith("'") && i.endsWith("'")) && (i = i.substring(1, i.length - 1)), o[u] = i;
+          let s = n.substring(t + 1).trim();
+          (s.startsWith('"') && s.endsWith('"') || s.startsWith("'") && s.endsWith("'")) && (s = s.substring(1, s.length - 1)), o[u] = s;
         }
-      }), a.end(JSON.stringify(o)), !0;
+      }), d.end(JSON.stringify(o)), !0;
     }
-    if (r.method === "GET" && g === "/api/distro") {
-      let p = "Ubuntu 24.04.4 LTS", e = "DebianUbuntu", o = ["update-grub"];
+    if (i.method === "GET" && p === "/api/distro") {
+      let f = "Ubuntu 24.04.4 LTS", e = "DebianUbuntu", o = ["update-grub"];
       try {
-        c.readFileSync("/etc/os-release", "utf8").split(`
+        l.readFileSync("/etc/os-release", "utf8").split(`
 `).forEach((n) => {
           if (n.startsWith("PRETTY_NAME="))
-            p = n.split("=")[1].replace(/["']/g, "").trim();
+            f = n.split("=")[1].replace(/["']/g, "").trim();
           else if (n.startsWith("ID=")) {
             const t = n.split("=")[1].replace(/["']/g, "").trim().toLowerCase();
             t === "fedora" || t === "rhel" || t === "centos" || t === "rocky" ? (e = "RHEL", o = ["grub2-mkconfig", "-o", "/boot/grub2/grub.cfg"]) : (t === "arch" || t === "manjaro") && (e = "Arch", o = ["grub-mkconfig", "-o", "/boot/grub/grub.cfg"]);
@@ -375,32 +375,32 @@ async function oe(r, a) {
         });
       } catch {
       }
-      return a.end(JSON.stringify({
-        distro_name: p,
+      return d.end(JSON.stringify({
+        distro_name: f,
         family: e,
         default_grub_path: "/etc/default/grub",
         grub_dir: "/boot/grub",
         grub_cfg_path: "/boot/grub/grub.cfg",
         themes_dir: "/boot/grub/themes",
         regen_command: o,
-        uses_bls: c.existsSync("/boot/loader/entries")
+        uses_bls: l.existsSync("/boot/loader/entries")
       })), !0;
     }
-    if (r.method === "GET" && g === "/api/scan-themes") {
-      const p = c.existsSync("/boot/grub2/themes") ? "/boot/grub2/themes" : "/boot/grub/themes", e = [];
+    if (i.method === "GET" && p === "/api/scan-themes") {
+      const f = l.existsSync("/boot/grub2/themes") ? "/boot/grub2/themes" : "/boot/grub/themes", e = [];
       try {
         let o = [];
         try {
-          o = c.readdirSync(p);
+          o = l.readdirSync(f);
         } catch {
-          o = D(`pkexec /usr/bin/grub-editor-helper find "${p}" -maxdepth 1 -mindepth 1 -type d`, { encoding: "utf8" }).split(`
-`).filter(Boolean).map((n) => y.basename(n.trim()));
+          o = D(`pkexec /usr/bin/grub-editor-helper find "${f}" -maxdepth 1 -mindepth 1 -type d`, { encoding: "utf8" }).split(`
+`).filter(Boolean).map((n) => S.basename(n.trim()));
         }
-        for (const s of o) {
-          const n = y.join(p, s), t = y.join(n, "theme.txt");
+        for (const r of o) {
+          const n = S.join(f, r), t = S.join(n, "theme.txt");
           let u = !1;
           try {
-            c.existsSync(t) && (u = !0);
+            l.existsSync(t) && (u = !0);
           } catch {
             try {
               D(`test -f "${t}"`, { stdio: "ignore" }), u = !0;
@@ -408,13 +408,13 @@ async function oe(r, a) {
             }
           }
           u && e.push({
-            name: s,
+            name: r,
             path: n,
             is_valid: !0,
             validation_errors: [],
             has_pf2_fonts: !0,
             background_image: "background.png",
-            title_text: `${s} Theme`
+            title_text: `${r} Theme`
           });
         }
       } catch (o) {
@@ -428,200 +428,224 @@ async function oe(r, a) {
         has_pf2_fonts: !0,
         background_image: "background.png",
         title_text: "Ubuntu Default Theme"
-      }), a.end(JSON.stringify(e)), !0;
+      }), d.end(JSON.stringify(e)), !0;
     }
-    if (r.method === "GET" && g === "/api/snapshots") {
-      b("GET /api/snapshots", "Fetching recovery snapshots...");
-      const p = A(), e = [];
-      if (c.existsSync(p))
+    if (i.method === "GET" && p === "/api/snapshots") {
+      m("GET /api/snapshots", "Fetching recovery snapshots...");
+      const f = M(), e = [];
+      if (l.existsSync(f))
         try {
-          const o = c.readdirSync(p);
-          for (const s of o) {
-            const n = y.join(p, s, "snapshot_metadata.json");
-            if (c.existsSync(n))
+          const o = l.readdirSync(f);
+          for (const r of o) {
+            const n = S.join(f, r, "snapshot_metadata.json");
+            if (l.existsSync(n))
               try {
-                const t = O(n), u = JSON.parse(t);
+                const t = v(n), u = JSON.parse(t);
                 e.push(u);
               } catch {
               }
           }
-          e.sort((s, n) => (n.timestamp || 0) - (s.timestamp || 0));
+          e.sort((r, n) => (n.timestamp || 0) - (r.timestamp || 0));
         } catch (o) {
-          R("GET /api/snapshots", "Failed reading snapshot directories:", o);
+          P("GET /api/snapshots", "Failed reading snapshot directories:", o);
         }
-      return b("GET /api/snapshots", `Returning ${e.length} snapshots`), a.end(JSON.stringify(e)), !0;
+      return m("GET /api/snapshots", `Returning ${e.length} snapshots`), d.end(JSON.stringify(e)), !0;
     }
-    if (r.method === "GET" && g === "/api/snapshot-details") {
-      const p = h.searchParams.get("timestamp");
-      if (!p)
-        return a.statusCode = 400, a.end(JSON.stringify({ error: "Missing timestamp" })), !0;
+    if (i.method === "GET" && p === "/api/snapshot-details") {
+      const f = b.searchParams.get("timestamp");
+      if (!f)
+        return d.statusCode = 400, d.end(JSON.stringify({ error: "Missing timestamp" })), !0;
       try {
-        const e = A(), o = y.join(e, `snap_${p}`), s = y.join(o, "snapshot_metadata.json");
-        if (!c.existsSync(s))
+        const e = M(), o = S.join(e, `snap_${f}`), r = S.join(o, "snapshot_metadata.json");
+        if (!l.existsSync(r))
           throw new Error("Snapshot not found");
-        const n = JSON.parse(O(s)), t = {};
+        const n = JSON.parse(v(r)), t = {};
         if (n.default_grub_backup)
           try {
-            O(n.default_grub_backup).split(`
-`).forEach((l) => {
-              const d = l.trim();
-              if (d && !d.startsWith("#") && d.includes("=")) {
-                const f = d.indexOf("="), m = d.substring(0, f).trim();
-                let _ = d.substring(f + 1).trim();
-                (_.startsWith('"') && _.endsWith('"') || _.startsWith("'") && _.endsWith("'")) && (_ = _.substring(1, _.length - 1)), t[m] = _;
+            v(n.default_grub_backup).split(`
+`).forEach((g) => {
+              const c = g.trim();
+              if (c && !c.startsWith("#") && c.includes("=")) {
+                const h = c.indexOf("="), k = c.substring(0, h).trim();
+                let y = c.substring(h + 1).trim();
+                (y.startsWith('"') && y.endsWith('"') || y.startsWith("'") && y.endsWith("'")) && (y = y.substring(1, y.length - 1)), t[k] = y;
               }
             });
-          } catch (i) {
-            R("GET /api/snapshot-details", "Failed to read default_grub_backup", i);
+          } catch (a) {
+            P("GET /api/snapshot-details", "Failed to read default_grub_backup", a);
           }
         let u = [];
         if (n.bls_entries_backup)
           try {
-            u = JSON.parse(O(n.bls_entries_backup));
-          } catch (i) {
-            R("GET /api/snapshot-details", "Failed to read bls_entries_backup", i);
+            u = JSON.parse(v(n.bls_entries_backup));
+          } catch (a) {
+            P("GET /api/snapshot-details", "Failed to read bls_entries_backup", a);
           }
-        a.end(JSON.stringify({ config: t, bootEntries: u }));
+        let s = [];
+        if (n.grub_cfg_backup)
+          try {
+            const a = v(n.grub_cfg_backup), g = Z(a);
+            s = H(g, u);
+          } catch (a) {
+            P("GET /api/snapshot-details", "Failed to parse snapshot grub_cfg", a);
+          }
+        d.end(JSON.stringify({ config: t, bootEntries: u, snapEntries: s }));
       } catch (e) {
-        a.statusCode = 500, a.end(JSON.stringify({ error: e.message }));
+        d.statusCode = 500, d.end(JSON.stringify({ error: e.message }));
       }
       return !0;
     }
-    if (r.method === "POST") {
-      let p = "";
-      return r.on("data", (e) => {
-        p += e;
+    if (i.method === "POST") {
+      let f = "";
+      return i.on("data", (e) => {
+        f += e;
       }), await new Promise((e) => {
-        r.on("end", async () => {
+        i.on("end", async () => {
           try {
-            const o = p ? JSON.parse(p) : {};
-            if (g === "/api/save-grub-config") {
-              const { newConfig: s, reason: n, createSnapshot: t } = o;
-              if (b("POST /api/save-grub-config", `Saving config (createSnapshot=${t}, reason="${n}")`), s) {
+            const o = f ? JSON.parse(f) : {};
+            if (p === "/api/save-grub-config") {
+              const { newConfig: r, reason: n, createSnapshot: t } = o;
+              if (m("POST /api/save-grub-config", `Saving config (createSnapshot=${t}, reason="${n}")`), r) {
                 const u = ["# Updated via GrubEditor GUI"];
-                for (const [l, d] of Object.entries(s))
-                  u.push(`${l}="${d}"`);
-                const i = y.join(U.tmpdir(), `grub-config-${Date.now()}`);
-                c.writeFileSync(i, u.join(`
+                for (const [a, g] of Object.entries(r))
+                  u.push(`${a}="${g}"`);
+                const s = S.join(U.tmpdir(), `grub-config-${Date.now()}`);
+                l.writeFileSync(s, u.join(`
 `) + `
 `, "utf8");
                 try {
-                  c.copyFileSync(i, "/etc/default/grub"), c.existsSync(i) && c.unlinkSync(i);
+                  l.copyFileSync(s, "/etc/default/grub"), l.existsSync(s) && l.unlinkSync(s);
                 } catch {
                   try {
-                    D(`pkexec /usr/bin/grub-editor-helper cp "${i}" /etc/default/grub && rm -f "${i}"`);
-                  } catch (l) {
-                    throw console.warn("Failed to copy config via pkexec:", l.message), new Error("Failed to copy config via pkexec: " + l.message);
+                    D(`pkexec /usr/bin/grub-editor-helper cp "${s}" /etc/default/grub && rm -f "${s}"`);
+                  } catch (a) {
+                    throw console.warn("Failed to copy config via pkexec:", a.message), new Error("Failed to copy config via pkexec: " + a.message);
                   }
                 }
-                delete k["/etc/default/grub"], delete k["/boot/grub/default"];
+                delete _["/etc/default/grub"], delete _["/boot/grub/default"];
               }
-              t && H(n || "Modified GRUB general configuration"), a.end(JSON.stringify({ success: !0 })), e();
+              t && V(n || "Modified GRUB general configuration"), d.end(JSON.stringify({ success: !0 })), e();
               return;
             }
-            if (g === "/api/save-boot-entries") {
-              const { newEntries: s, reason: n, createSnapshot: t } = o;
-              if (b("POST /api/save-boot-entries", `Received ${s?.length ?? 0} entries to save (createSnapshot=${t}, reason="${n}")`), s && Array.isArray(s)) {
-                const u = s.map((d) => ({ ...d, originalTitle: d.originalTitle || d.title })), i = u.filter((d) => d.deleted).length, l = u.filter((d) => !d.deleted).length;
-                b("POST /api/save-boot-entries", `Saving ${u.length} entries (${l} active, ${i} deleted) to ${G()}`), u.forEach((d, f) => {
-                  b("POST /api/save-boot-entries", `  [${f}] id="${d.id}" title="${d.title}" origTitle="${d.originalTitle}" deleted=${d.deleted} enabled=${d.enabled}`);
-                }), C(G(), JSON.stringify(u, null, 2)), b("POST /api/save-boot-entries", "Write successful");
+            if (p === "/api/save-boot-entries") {
+              const { newEntries: r, reason: n, createSnapshot: t } = o;
+              if (m("POST /api/save-boot-entries", `Received ${r?.length ?? 0} entries to save (createSnapshot=${t}, reason="${n}")`), r && Array.isArray(r)) {
+                const u = r.map((g) => ({ ...g, originalTitle: g.originalTitle || g.title })), s = u.filter((g) => g.deleted).length, a = u.filter((g) => !g.deleted).length;
+                m("POST /api/save-boot-entries", `Saving ${u.length} entries (${a} active, ${s} deleted) to ${N()}`), u.forEach((g, c) => {
+                  m("POST /api/save-boot-entries", `  [${c}] id="${g.id}" title="${g.title}" origTitle="${g.originalTitle}" deleted=${g.deleted} enabled=${g.enabled}`);
+                }), G(N(), JSON.stringify(u, null, 2)), m("POST /api/save-boot-entries", "Write successful");
               }
-              t && H(n || "Modified boot menu entries & ordering"), delete k["/boot/grub/grub.cfg"], delete k["/boot/grub2/grub.cfg"], a.end(JSON.stringify({ success: !0 })), e();
+              t && V(n || "Modified boot menu entries & ordering"), delete _["/boot/grub/grub.cfg"], delete _["/boot/grub2/grub.cfg"], d.end(JSON.stringify({ success: !0 })), e();
               return;
             }
-            if (g === "/api/restore-snapshot") {
-              const { timestamp: s } = o;
-              b("POST /api/restore-snapshot", `Restoring snapshot timestamp ${s}...`);
-              const n = A(), t = y.join(n, `snap_${s}`), u = y.join(t, "snapshot_metadata.json");
-              if (!c.existsSync(u))
-                throw new Error("Snapshot metadata not found for timestamp " + s);
-              const i = JSON.parse(O(u));
-              H(`Auto-backup before restoring snapshot from ${new Date(s).toLocaleString()}`);
+            if (p === "/api/restore-snapshot") {
+              const { timestamp: r } = o;
+              m("POST /api/restore-snapshot", `Restoring snapshot timestamp ${r}...`);
+              const n = M(), t = S.join(n, `snap_${r}`), u = S.join(t, "snapshot_metadata.json");
+              if (!l.existsSync(u))
+                throw new Error("Snapshot metadata not found for timestamp " + r);
+              const s = JSON.parse(v(u));
+              V(`Auto-backup before restoring snapshot from ${new Date(r).toLocaleString()}`);
               try {
-                if (i.default_grub_backup && c.existsSync(i.default_grub_backup)) {
-                  const d = c.existsSync("/etc/default/grub") ? "/etc/default/grub" : "/boot/grub/default";
-                  C(d, O(i.default_grub_backup)), delete k["/etc/default/grub"], delete k["/boot/grub/default"];
+                const a = process.getuid ? process.getuid() === 0 : !1, g = `/tmp/grub-editor-restore-script-${Date.now()}.sh`;
+                let c = `#!/bin/bash
+set -e
+set -x
+`;
+                if (s.default_grub_backup && l.existsSync(s.default_grub_backup)) {
+                  const $ = l.existsSync("/etc/default/grub") ? "/etc/default/grub" : "/boot/grub/default";
+                  c += `cp "${s.default_grub_backup}" "${$}"
+chmod 644 "${$}"
+`;
                 }
-                if (i.grub_cfg_backup && c.existsSync(i.grub_cfg_backup)) {
-                  const d = c.existsSync("/boot/grub2/grub.cfg") ? "/boot/grub2/grub.cfg" : "/boot/grub/grub.cfg";
-                  C(d, O(i.grub_cfg_backup)), delete k["/boot/grub/grub.cfg"], delete k["/boot/grub2/grub.cfg"];
+                if (s.grub_cfg_backup && l.existsSync(s.grub_cfg_backup)) {
+                  const $ = l.existsSync("/boot/grub2/grub.cfg") ? "/boot/grub2/grub.cfg" : "/boot/grub/grub.cfg";
+                  c += `cp "${s.grub_cfg_backup}" "${$}"
+chmod 644 "${$}"
+`;
                 }
-                let l = !1;
-                if (i.bls_entries_backup && c.existsSync(i.bls_entries_backup)) {
-                  const d = O(i.bls_entries_backup);
-                  C(G(), d), l = !0;
+                const h = N(), k = S.dirname(h);
+                c += `mkdir -p "${k}"
+chmod 755 "${k}"
+`, s.bls_entries_backup && l.existsSync(s.bls_entries_backup) ? c += `cp "${s.bls_entries_backup}" "${h}"
+chmod 644 "${h}"
+` : c += `echo "[]" > "${h}"
+chmod 644 "${h}"
+`, l.writeFileSync(g, c, "utf8"), m("POST /api/restore-snapshot", "Executing Batched Restore Script..."), D(`${a ? "bash" : "pkexec"} ${(a ? ["bash", g] : ["/usr/bin/grub-editor-helper", "bash", g]).join(" ")}`, { stdio: "ignore" });
+                try {
+                  l.existsSync(g) && l.unlinkSync(g);
+                } catch {
                 }
-                l || C(G(), "[]"), b("POST /api/restore-snapshot", "Restore completed successfully"), a.end(JSON.stringify({ success: !0 }));
-              } catch (l) {
-                R("POST /api/restore-snapshot", "Restore aborted due to error:", l.message), a.statusCode = 500, a.end(JSON.stringify({ success: !1, error: l.message }));
+                delete _["/etc/default/grub"], delete _["/boot/grub/default"], delete _["/boot/grub/grub.cfg"], delete _["/boot/grub2/grub.cfg"], delete _[h], m("POST /api/restore-snapshot", "Restore completed successfully"), d.end(JSON.stringify({ success: !0 }));
+              } catch (a) {
+                P("POST /api/restore-snapshot", "Restore aborted due to error:", a.message), d.statusCode = 500, d.end(JSON.stringify({ success: !1, error: a.message }));
               }
               e();
               return;
             }
-            if (g === "/api/trigger-regen") {
-              b("POST /api/trigger-regen", "Starting GRUB regeneration...");
-              let s = "";
+            if (p === "/api/trigger-regen") {
+              m("POST /api/trigger-regen", "Starting GRUB regeneration...");
+              let r = "";
               try {
                 const n = process.getuid ? process.getuid() === 0 : !1, t = n ? "update-grub 2>&1" : "pkexec /usr/bin/grub-editor-helper update-grub 2>&1";
-                b("POST /api/trigger-regen", `Running: ${t} (isRoot=${n})`), s = D(t, { encoding: "utf8" }), b("POST /api/trigger-regen", "update-grub completed successfully"), delete k["/boot/grub/grub.cfg"], delete k["/boot/grub2/grub.cfg"];
+                m("POST /api/trigger-regen", `Running: ${t} (isRoot=${n})`), r = D(t, { encoding: "utf8" }), m("POST /api/trigger-regen", "update-grub completed successfully"), delete _["/boot/grub/grub.cfg"], delete _["/boot/grub2/grub.cfg"];
                 try {
-                  const u = c.existsSync("/boot/grub2/grub.cfg") ? "/boot/grub2/grub.cfg" : "/boot/grub/grub.cfg";
-                  if (c.existsSync(u)) {
-                    const i = O(u), l = I();
-                    if (b("POST /api/trigger-regen", `Post-regen: ${l.length} overrides to apply to ${u}`), l.length > 0) {
-                      const d = l.filter((m) => m.deleted);
-                      b("POST /api/trigger-regen", `Overrides breakdown: ${l.length - d.length} active, ${d.length} deleted`);
-                      const f = Z(i, l);
-                      C(u, f), b("POST /api/trigger-regen", "Successfully wrote modified grub.cfg"), s += `
+                  const u = l.existsSync("/boot/grub2/grub.cfg") ? "/boot/grub2/grub.cfg" : "/boot/grub/grub.cfg";
+                  if (l.existsSync(u)) {
+                    const s = v(u), a = I();
+                    if (m("POST /api/trigger-regen", `Post-regen: ${a.length} overrides to apply to ${u}`), a.length > 0) {
+                      const g = a.filter((h) => h.deleted);
+                      m("POST /api/trigger-regen", `Overrides breakdown: ${a.length - g.length} active, ${g.length} deleted`);
+                      const c = K(s, a);
+                      G(u, c), m("POST /api/trigger-regen", "Successfully wrote modified grub.cfg"), r += `
 [GrubEditor] Applied custom menu ordering, titles, and exclusions to grub.cfg successfully.`;
                     }
                   }
                 } catch (u) {
-                  R("POST /api/trigger-regen", "Failed to apply post-regeneration overrides:", u), s += `
+                  P("POST /api/trigger-regen", "Failed to apply post-regeneration overrides:", u), r += `
 [GrubEditor] Warning: Could not apply overrides to grub.cfg: ${u.message}`;
                 }
               } catch (n) {
-                throw R("POST /api/trigger-regen", "update-grub failed:", n.message), new Error(`Failed to regenerate GRUB configuration: ${n.stdout || n.stderr || n.message}`);
+                throw P("POST /api/trigger-regen", "update-grub failed:", n.message), new Error(`Failed to regenerate GRUB configuration: ${n.stdout || n.stderr || n.message}`);
               }
-              b("POST /api/trigger-regen", "Regeneration pipeline complete"), a.end(JSON.stringify({ success: !0, output: s })), e();
+              m("POST /api/trigger-regen", "Regeneration pipeline complete"), d.end(JSON.stringify({ success: !0, output: r })), e();
               return;
             }
-            if (g === "/api/deploy-pipeline") {
-              const { config: s, bootEntries: n, snapTitle: t } = o;
-              b("POST /api/deploy-pipeline", `Starting batched deploy pipeline. snapTitle: ${t}`);
-              const u = process.getuid ? process.getuid() === 0 : !1, i = u ? "" : "pkexec /usr/bin/grub-editor-helper ", l = `/tmp/grub-editor-deploy-config-${Date.now()}`, d = `/tmp/grub-editor-deploy-entries-${Date.now()}`;
-              let f = "";
-              for (const [j, N] of Object.entries(s))
-                f += `${j}="${N}"
+            if (p === "/api/deploy-pipeline") {
+              const { config: r, bootEntries: n, snapTitle: t } = o;
+              m("POST /api/deploy-pipeline", `Starting batched deploy pipeline. snapTitle: ${t}`);
+              const u = process.getuid ? process.getuid() === 0 : !1, s = u ? "" : "pkexec /usr/bin/grub-editor-helper ", a = `/tmp/grub-editor-deploy-config-${Date.now()}`, g = `/tmp/grub-editor-deploy-entries-${Date.now()}`;
+              let c = "";
+              for (const [j, C] of Object.entries(r))
+                c += `${j}="${C}"
 `;
-              c.writeFileSync(l, f);
-              const m = (n || []).map((j) => ({ ...j, originalTitle: j.originalTitle || j.title }));
-              c.writeFileSync(d, JSON.stringify(m, null, 2));
-              const _ = Date.now(), $ = y.join(A(), `snap_${_}`), x = c.existsSync("/etc/default/grub") ? "/etc/default/grub" : "/boot/grub/default", S = c.existsSync("/boot/grub2/grub.cfg") ? "/boot/grub2/grub.cfg" : "/boot/grub/grub.cfg", T = G(), w = `/tmp/grub-editor-deploy-script-${Date.now()}.sh`, E = `/tmp/grub-editor-raw-cfg-${Date.now()}`, v = {
-                timestamp: _,
-                date_string: `${_} (UTC Timestamp)`,
+              l.writeFileSync(a, c);
+              const h = (n || []).map((j) => ({ ...j, originalTitle: j.originalTitle || j.title }));
+              l.writeFileSync(g, JSON.stringify(h, null, 2));
+              const k = Date.now(), y = S.join(M(), `snap_${k}`), w = l.existsSync("/etc/default/grub") ? "/etc/default/grub" : "/boot/grub/default", $ = l.existsSync("/boot/grub2/grub.cfg") ? "/boot/grub2/grub.cfg" : "/boot/grub/grub.cfg", E = N(), x = `/tmp/grub-editor-deploy-script-${Date.now()}.sh`, T = `/tmp/grub-editor-raw-cfg-${Date.now()}`, O = {
+                timestamp: k,
+                date_string: `${k} (UTC Timestamp)`,
                 description: t,
-                default_grub_backup: y.join($, "default_grub.bak"),
-                grub_cfg_backup: c.existsSync(S) ? y.join($, "grub.cfg.bak") : null,
-                bls_entries_backup: y.join($, "grub-editor-entries.json.bak")
+                default_grub_backup: S.join(y, "default_grub.bak"),
+                grub_cfg_backup: l.existsSync($) ? S.join(y, "grub.cfg.bak") : null,
+                bls_entries_backup: S.join(y, "grub-editor-entries.json.bak")
               }, J = `/tmp/grub-editor-deploy-meta-${Date.now()}`;
-              c.writeFileSync(J, JSON.stringify(v, null, 2));
-              const F = `/tmp/grub-editor-patched-cfg-${Date.now()}`, Q = `#!/bin/bash
+              l.writeFileSync(J, JSON.stringify(O, null, 2));
+              const F = `/tmp/grub-editor-patched-cfg-${Date.now()}`, q = `#!/bin/bash
 set -e
 set -x
 echo "[Bash Runtime] Stage 1: Applying new GRUB configurations..."
-cp "${l}" "${x}"
-chmod 644 "${x}"
-cp "${d}" "${T}"
-chmod 644 "${T}"
+cp "${a}" "${w}"
+chmod 644 "${w}"
+cp "${g}" "${E}"
+chmod 644 "${E}"
 
 echo "[Bash Runtime] Stage 2: Regenerating bootloader via update-grub..."
 update-grub 2>&1
 
 echo "[Bash Runtime] Stage 3: Exposing raw configuration for Node.js patching..."
-cat "${S}" > "${E}"
-chmod 666 "${E}"
+cat "${$}" > "${T}"
+chmod 666 "${T}"
 
 echo "[Bash Runtime] Stage 4: Waiting for Node.js to apply dynamic overrides..."
 COUNT=0
@@ -635,112 +659,112 @@ while [ ! -f "${F}" ]; do
 done
 
 echo "[Bash Runtime] Stage 5: Finalizing deployment..."
-cp "${F}" "${S}"
-chmod 644 "${S}"
+cp "${F}" "${$}"
+chmod 644 "${$}"
 
 echo "[Bash Runtime] Stage 6: Recording final state into snapshot..."
-mkdir -p "${$}"
-chmod 755 "${$}"
-cp "${J}" "${$}/snapshot_metadata.json"
-chmod 644 "${$}/snapshot_metadata.json"
+mkdir -p "${y}"
+chmod 755 "${y}"
+cp "${J}" "${y}/snapshot_metadata.json"
+chmod 644 "${y}/snapshot_metadata.json"
 
-if [ -n "${v.default_grub_backup}" ] && [ "${v.default_grub_backup}" != "null" ] && [ -f "${x}" ]; then cp "${x}" "${v.default_grub_backup}"; chmod 644 "${v.default_grub_backup}"; fi
-if [ -n "${v.grub_cfg_backup}" ] && [ "${v.grub_cfg_backup}" != "null" ] && [ -f "${S}" ]; then cp "${S}" "${v.grub_cfg_backup}"; chmod 644 "${v.grub_cfg_backup}"; fi
-if [ -n "${v.bls_entries_backup}" ] && [ "${v.bls_entries_backup}" != "null" ] && [ -f "${T}" ]; then cp "${T}" "${v.bls_entries_backup}"; chmod 644 "${v.bls_entries_backup}"; fi
+if [ -n "${O.default_grub_backup}" ] && [ "${O.default_grub_backup}" != "null" ] && [ -f "${w}" ]; then cp "${w}" "${O.default_grub_backup}"; chmod 644 "${O.default_grub_backup}"; fi
+if [ -n "${O.grub_cfg_backup}" ] && [ "${O.grub_cfg_backup}" != "null" ] && [ -f "${$}" ]; then cp "${$}" "${O.grub_cfg_backup}"; chmod 644 "${O.grub_cfg_backup}"; fi
+if [ -n "${O.bls_entries_backup}" ] && [ "${O.bls_entries_backup}" != "null" ] && [ -f "${E}" ]; then cp "${E}" "${O.bls_entries_backup}"; chmod 644 "${O.bls_entries_backup}"; fi
 
 echo "[Bash Runtime] Execution completed successfully!"
 `;
-              c.writeFileSync(w, Q), b("POST /api/deploy-pipeline", "Executing Batched Deploy Script Asynchronously...");
+              l.writeFileSync(x, q), m("POST /api/deploy-pipeline", "Executing Batched Deploy Script Asynchronously...");
               try {
-                const j = await new Promise((N, V) => {
-                  let L = "";
-                  const B = re(u ? "bash" : "pkexec", u ? ["bash", w] : ["/usr/bin/grub-editor-helper", "bash", w]);
-                  B.stdout.on("data", (P) => {
-                    L += P.toString();
-                  }), B.stderr.on("data", (P) => {
-                    L += P.toString();
-                  }), B.on("close", (P) => {
-                    P === 0 ? N(L) : V(new Error(`Exit code ${P}:
-${L}`));
-                  }), B.on("error", (P) => {
-                    V(new Error(`Spawn error: ${P.message}
-${L}`));
+                const j = await new Promise((C, z) => {
+                  let A = "";
+                  const B = se(u ? "bash" : "pkexec", u ? ["bash", x] : ["/usr/bin/grub-editor-helper", "bash", x]);
+                  B.stdout.on("data", (R) => {
+                    A += R.toString();
+                  }), B.stderr.on("data", (R) => {
+                    A += R.toString();
+                  }), B.on("close", (R) => {
+                    R === 0 ? C(A) : z(new Error(`Exit code ${R}:
+${A}`));
+                  }), B.on("error", (R) => {
+                    z(new Error(`Spawn error: ${R.message}
+${A}`));
                   });
-                  const q = setInterval(() => {
-                    if (c.existsSync(E)) {
-                      clearInterval(q), b("POST /api/deploy-pipeline", "Detected raw config. Applying overrides...");
+                  const ee = setInterval(() => {
+                    if (l.existsSync(T)) {
+                      clearInterval(ee), m("POST /api/deploy-pipeline", "Detected raw config. Applying overrides...");
                       try {
-                        const P = c.readFileSync(E, "utf8"), ee = Z(P, m);
-                        c.writeFileSync(F, ee);
-                      } catch (P) {
-                        R("POST /api/deploy-pipeline", "Failed to patch config:", P.message);
+                        const R = l.readFileSync(T, "utf8"), te = K(R, h);
+                        l.writeFileSync(F, te);
+                      } catch (R) {
+                        P("POST /api/deploy-pipeline", "Failed to patch config:", R.message);
                       }
                     }
                   }, 500);
                 });
-                [l, d, J, w, E, F].forEach((N) => {
+                [a, g, J, x, T, F].forEach((C) => {
                   try {
-                    c.existsSync(N) && c.unlinkSync(N);
+                    l.existsSync(C) && l.unlinkSync(C);
                   } catch {
                   }
-                }), delete k["/boot/grub/grub.cfg"], delete k["/boot/grub2/grub.cfg"], delete k["/etc/default/grub"], b("POST /api/deploy-pipeline", "Deployment pipeline complete"), a.end(JSON.stringify({ success: !0, output: j })), e();
+                }), delete _["/boot/grub/grub.cfg"], delete _["/boot/grub2/grub.cfg"], delete _["/etc/default/grub"], m("POST /api/deploy-pipeline", "Deployment pipeline complete"), d.end(JSON.stringify({ success: !0, output: j })), e();
                 return;
               } catch (j) {
-                throw [l, d, J, w, E, F].forEach((N) => {
+                throw [a, g, J, x, T, F].forEach((C) => {
                   try {
-                    c.existsSync(N) && c.unlinkSync(N);
+                    l.existsSync(C) && l.unlinkSync(C);
                   } catch {
                   }
-                }), R("POST /api/deploy-pipeline", "Deploy pipeline failed:", j.message), new Error(`Failed during deployment:
+                }), P("POST /api/deploy-pipeline", "Deploy pipeline failed:", j.message), new Error(`Failed during deployment:
 ${j.message}`);
               }
             }
-            a.end(JSON.stringify({ success: !0 })), e();
+            d.end(JSON.stringify({ success: !0 })), e();
           } catch (o) {
-            a.statusCode = 500, a.end(JSON.stringify({ error: o.message })), e();
+            d.statusCode = 500, d.end(JSON.stringify({ error: o.message })), e();
           }
         });
       }), !0;
     }
     return !1;
-  } catch (h) {
-    return console.error("GrubBackend error:", h), a.statusCode = 500, a.end(JSON.stringify({ error: h.message || "Internal Server Error" })), !0;
+  } catch (b) {
+    return console.error("GrubBackend error:", b), d.statusCode = 500, d.end(JSON.stringify({ error: b.message || "Internal Server Error" })), !0;
   }
 }
-const M = y.dirname(ie(import.meta.url));
+const L = S.dirname(re(import.meta.url));
 W.commandLine.appendSwitch("no-sandbox");
 W.commandLine.appendSwitch("disable-gpu-sandbox");
-function K() {
-  const r = c.existsSync(y.join(M, "preload.mjs")) ? y.join(M, "preload.mjs") : y.join(M, "preload.js"), a = new X({
+function X() {
+  const i = l.existsSync(S.join(L, "preload.mjs")) ? S.join(L, "preload.mjs") : S.join(L, "preload.js"), d = new Y({
     width: 1280,
     height: 860,
     minWidth: 1024,
     minHeight: 768,
     title: "GrubEditor - Pro Bootloader Studio",
     backgroundColor: "#050811",
-    icon: y.join(M, "../public/app_logo.png"),
+    icon: S.join(L, "../public/app_logo.png"),
     webPreferences: {
-      preload: r,
+      preload: i,
       nodeIntegration: !1,
       contextIsolation: !0
     }
   });
-  if (a.setMenuBarVisibility(!1), te.setApplicationMenu(null), a.webContents.on("console-message", (h, g, p, e, o) => {
-    console.log(`[Renderer Console] [level ${g}] ${p} (${o}:${e})`);
-  }), a.webContents.on("did-fail-load", (h, g, p, e) => {
-    console.error(`[Renderer Fail Load] (${g}) ${p} - ${e}`);
-  }), a.webContents.on("render-process-gone", (h, g) => {
-    console.error(`[Renderer Process Gone] ${g.reason} - exitCode: ${g.exitCode}`);
+  if (d.setMenuBarVisibility(!1), ne.setApplicationMenu(null), d.webContents.on("console-message", (b, p, f, e, o) => {
+    console.log(`[Renderer Console] [level ${p}] ${f} (${o}:${e})`);
+  }), d.webContents.on("did-fail-load", (b, p, f, e) => {
+    console.error(`[Renderer Fail Load] (${p}) ${f} - ${e}`);
+  }), d.webContents.on("render-process-gone", (b, p) => {
+    console.error(`[Renderer Process Gone] ${p.reason} - exitCode: ${p.exitCode}`);
   }), process.env.VITE_DEV_SERVER_URL)
-    a.loadURL(process.env.VITE_DEV_SERVER_URL);
+    d.loadURL(process.env.VITE_DEV_SERVER_URL);
   else {
-    const h = y.join(M, "../dist"), g = ne.createServer(async (e, o) => {
+    const b = S.join(L, "../dist"), p = ie.createServer(async (e, o) => {
       try {
         if (!await oe(e, o)) {
           const n = new URL(e.url || "/", `http://${e.headers.host || "localhost"}`);
-          let t = y.join(h, n.pathname === "/" ? "index.html" : n.pathname);
-          c.existsSync(t) || (t = y.join(h, "index.html"));
-          const u = y.extname(t).toLowerCase(), l = {
+          let t = S.join(b, n.pathname === "/" ? "index.html" : n.pathname);
+          l.existsSync(t) || (t = S.join(b, "index.html"));
+          const u = S.extname(t).toLowerCase(), a = {
             ".html": "text/html",
             ".js": "text/javascript",
             ".mjs": "text/javascript",
@@ -753,30 +777,30 @@ function K() {
             ".woff": "font/woff",
             ".woff2": "font/woff2"
           }[u] || "application/octet-stream";
-          o.writeHead(200, { "Content-Type": l }), c.createReadStream(t).pipe(o);
+          o.writeHead(200, { "Content-Type": a }), l.createReadStream(t).pipe(o);
         }
-      } catch (s) {
-        o.writeHead(500, { "Content-Type": "application/json" }), o.end(JSON.stringify({ error: s.message || "Internal Server Error" }));
+      } catch (r) {
+        o.writeHead(500, { "Content-Type": "application/json" }), o.end(JSON.stringify({ error: r.message || "Internal Server Error" }));
       }
-    }), p = (e) => {
-      g.listen(e, "127.0.0.1", () => {
-        const o = g.address().port;
-        a.loadURL(`http://127.0.0.1:${o}`);
+    }), f = (e) => {
+      p.listen(e, "127.0.0.1", () => {
+        const o = p.address().port;
+        d.loadURL(`http://127.0.0.1:${o}`);
       });
     };
-    g.on("error", (e) => {
-      e.code === "EADDRINUSE" && (console.warn("Port 31415 occupied, retrying with ephemeral loopback port..."), g.close(), p(0));
-    }), p(31415), a.on("closed", () => {
+    p.on("error", (e) => {
+      e.code === "EADDRINUSE" && (console.warn("Port 31415 occupied, retrying with ephemeral loopback port..."), p.close(), f(0));
+    }), f(31415), d.on("closed", () => {
       try {
-        g.close();
+        p.close();
       } catch {
       }
     });
   }
 }
 W.whenReady().then(() => {
-  K(), W.on("activate", () => {
-    X.getAllWindows().length === 0 && K();
+  X(), W.on("activate", () => {
+    Y.getAllWindows().length === 0 && X();
   });
 });
 W.on("window-all-closed", () => {
