@@ -123,52 +123,58 @@ export const SnapshotsPanel: React.FC<SnapshotsPanelProps> = ({ onRestore, logAc
     const { details, liveEntries } = viewingSnapshot;
     const snapOverrides: BootEntry[] = details.bootEntries || [];
     
-    if (snapOverrides.length === 0) {
-      return <div className="text-slate-400 text-sm italic py-2">No boot menu overrides in this checkpoint.</div>;
-    }
+    const changes: any[] = [];
 
-    // Filter to ONLY show entries that are actually different from the base system
-    const changedOverrides = snapOverrides.filter((override) => {
-      const live = liveEntries.find((e: any) => e.id === override.id);
-      const baseTitle = override.originalTitle || (live ? live.originalTitle : null) || (live ? live.title : '(default)');
-      const baseHidden = false;
-      return (override.title !== baseTitle) || (override.deleted !== baseHidden);
+    // Show all overrides in the snapshot that differ from the default system
+    snapOverrides.forEach((snap: any) => {
+      const live = liveEntries.find((e: any) => e.id === snap.id);
+      const originalTitle = snap.originalTitle || (live ? live.originalTitle : null) || snap.title;
+      
+      const titleChanged = snap.title !== originalTitle;
+      const hiddenChanged = snap.deleted === true;
+
+      if (titleChanged || hiddenChanged) {
+        changes.push({
+          id: snap.id,
+          label: originalTitle,
+          liveTitle: originalTitle, // Labeling as 'liveTitle' so the existing UI template renders it correctly as 'Default -> Snapshot'
+          snapTitle: snap.title,
+          liveDeleted: false,
+          snapDeleted: snap.deleted || false
+        });
+      }
     });
 
-    if (changedOverrides.length === 0) {
-      return <div className="text-slate-400 text-sm italic py-2">No boot entry changes exist in this checkpoint compared to system defaults.</div>;
+    if (changes.length === 0) {
+      return <div className="text-slate-400 text-sm italic py-2">This snapshot contains no boot entry overrides.</div>;
     }
 
     return (
       <div className="space-y-2">
-        {changedOverrides.map((override, idx) => {
-          const live = liveEntries.find((e: any) => e.id === override.id);
-          const baseTitle = override.originalTitle || (live ? live.originalTitle : null) || (live ? live.title : '(default)');
-          const baseHidden = false;
-          
-          const titleChanged = override.title !== baseTitle;
-          const hiddenChanged = override.deleted !== baseHidden;
+        {changes.map((c, idx) => {
+          const titleChanged = c.liveTitle !== c.snapTitle;
+          const hiddenChanged = c.liveDeleted !== c.snapDeleted;
 
           return (
-            <div key={override.id} className="p-3 rounded-lg border flex flex-col gap-2 text-sm bg-indigo-900/20 border-indigo-500/30">
+            <div key={c.id} className="p-3 rounded-lg border flex flex-col gap-2 text-sm bg-indigo-900/20 border-indigo-500/30">
               <div className="font-bold text-slate-200">
-                {idx + 1}. {baseTitle}
+                {idx + 1}. {c.label}
               </div>
               <div className="pl-4 flex flex-col gap-1">
                 {titleChanged && (
                   <div className="flex items-center gap-2">
                     <span className="text-slate-400 w-16">Title:</span>
-                    <span className="truncate max-w-[150px] text-rose-400/80">{baseTitle}</span>
+                    <span className="truncate max-w-[150px] text-rose-400/80">{c.liveTitle}</span>
                     <span className="text-slate-500 font-bold">{'->'}</span>
-                    <span className="font-bold truncate text-emerald-400">{override.title || baseTitle}</span>
+                    <span className="font-bold truncate text-emerald-400">{c.snapTitle}</span>
                   </div>
                 )}
                 {hiddenChanged && (
                   <div className="flex items-center gap-2">
                     <span className="text-slate-400 w-16">State:</span>
-                    <span className="text-rose-400/80">Visible</span>
+                    <span className="text-rose-400/80">{c.liveDeleted ? 'Hidden' : 'Visible'}</span>
                     <span className="text-slate-500 font-bold">{'->'}</span>
-                    <span className="font-bold text-emerald-400">{override.deleted ? 'Hidden' : 'Visible'}</span>
+                    <span className="font-bold text-emerald-400">{c.snapDeleted ? 'Hidden' : 'Visible'}</span>
                   </div>
                 )}
               </div>
