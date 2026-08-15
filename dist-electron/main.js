@@ -505,7 +505,7 @@ async function oe(i, d) {
             const o = f ? JSON.parse(f) : {};
             if (p === "/api/save-grub-config") {
               const { newConfig: r, reason: n, createSnapshot: t } = o;
-              if (m("POST /api/save-grub-config", `Saving config (createSnapshot=${t}, reason="${n}")`), r) {
+              if (m("POST /api/save-grub-config", `Saving config (createSnapshot=${t}, reason="${n}")`), t && V(n || "Modified GRUB general configuration"), r) {
                 const u = ["# Updated via GrubEditor GUI"];
                 for (const [a, g] of Object.entries(r))
                   u.push(`${a}="${g}"`);
@@ -524,18 +524,18 @@ async function oe(i, d) {
                 }
                 delete _["/etc/default/grub"], delete _["/boot/grub/default"];
               }
-              t && V(n || "Modified GRUB general configuration"), d.end(JSON.stringify({ success: !0 })), e();
+              d.end(JSON.stringify({ success: !0 })), e();
               return;
             }
             if (p === "/api/save-boot-entries") {
               const { newEntries: r, reason: n, createSnapshot: t } = o;
-              if (m("POST /api/save-boot-entries", `Received ${r?.length ?? 0} entries to save (createSnapshot=${t}, reason="${n}")`), r && Array.isArray(r)) {
+              if (m("POST /api/save-boot-entries", `Received ${r?.length ?? 0} entries to save (createSnapshot=${t}, reason="${n}")`), t && V(n || "Modified boot menu entries & ordering"), r && Array.isArray(r)) {
                 const u = r.map((g) => ({ ...g, originalTitle: g.originalTitle || g.title })), s = u.filter((g) => g.deleted).length, a = u.filter((g) => !g.deleted).length;
                 m("POST /api/save-boot-entries", `Saving ${u.length} entries (${a} active, ${s} deleted) to ${N()}`), u.forEach((g, c) => {
                   m("POST /api/save-boot-entries", `  [${c}] id="${g.id}" title="${g.title}" origTitle="${g.originalTitle}" deleted=${g.deleted} enabled=${g.enabled}`);
                 }), G(N(), JSON.stringify(u, null, 2)), m("POST /api/save-boot-entries", "Write successful");
               }
-              t && V(n || "Modified boot menu entries & ordering"), delete _["/boot/grub/grub.cfg"], delete _["/boot/grub2/grub.cfg"], d.end(JSON.stringify({ success: !0 })), e();
+              delete _["/boot/grub/grub.cfg"], delete _["/boot/grub2/grub.cfg"], d.end(JSON.stringify({ success: !0 })), e();
               return;
             }
             if (p === "/api/restore-snapshot") {
@@ -634,6 +634,16 @@ chmod 644 "${h}"
               const F = `/tmp/grub-editor-patched-cfg-${Date.now()}`, q = `#!/bin/bash
 set -e
 set -x
+echo "[Bash Runtime] Stage 0: Recording initial state into snapshot..."
+mkdir -p "${y}"
+chmod 755 "${y}"
+cp "${J}" "${y}/snapshot_metadata.json"
+chmod 644 "${y}/snapshot_metadata.json"
+
+if [ -n "${O.default_grub_backup}" ] && [ "${O.default_grub_backup}" != "null" ] && [ -f "${w}" ]; then cp "${w}" "${O.default_grub_backup}"; chmod 644 "${O.default_grub_backup}"; fi
+if [ -n "${O.grub_cfg_backup}" ] && [ "${O.grub_cfg_backup}" != "null" ] && [ -f "${$}" ]; then cp "${$}" "${O.grub_cfg_backup}"; chmod 644 "${O.grub_cfg_backup}"; fi
+if [ -n "${O.bls_entries_backup}" ] && [ "${O.bls_entries_backup}" != "null" ] && [ -f "${E}" ]; then cp "${E}" "${O.bls_entries_backup}"; chmod 644 "${O.bls_entries_backup}"; fi
+
 echo "[Bash Runtime] Stage 1: Applying new GRUB configurations..."
 cp "${a}" "${w}"
 chmod 644 "${w}"
@@ -661,16 +671,6 @@ done
 echo "[Bash Runtime] Stage 5: Finalizing deployment..."
 cp "${F}" "${$}"
 chmod 644 "${$}"
-
-echo "[Bash Runtime] Stage 6: Recording final state into snapshot..."
-mkdir -p "${y}"
-chmod 755 "${y}"
-cp "${J}" "${y}/snapshot_metadata.json"
-chmod 644 "${y}/snapshot_metadata.json"
-
-if [ -n "${O.default_grub_backup}" ] && [ "${O.default_grub_backup}" != "null" ] && [ -f "${w}" ]; then cp "${w}" "${O.default_grub_backup}"; chmod 644 "${O.default_grub_backup}"; fi
-if [ -n "${O.grub_cfg_backup}" ] && [ "${O.grub_cfg_backup}" != "null" ] && [ -f "${$}" ]; then cp "${$}" "${O.grub_cfg_backup}"; chmod 644 "${O.grub_cfg_backup}"; fi
-if [ -n "${O.bls_entries_backup}" ] && [ "${O.bls_entries_backup}" != "null" ] && [ -f "${E}" ]; then cp "${E}" "${O.bls_entries_backup}"; chmod 644 "${O.bls_entries_backup}"; fi
 
 echo "[Bash Runtime] Execution completed successfully!"
 `;

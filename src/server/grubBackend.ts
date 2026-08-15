@@ -756,6 +756,11 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
             if (pathname === '/api/save-grub-config') {
               const { newConfig, reason, createSnapshot } = data;
               log('POST /api/save-grub-config', `Saving config (createSnapshot=${createSnapshot}, reason="${reason}")`);
+              
+              if (createSnapshot) {
+                createServerSnapshot(reason || "Modified GRUB general configuration");
+              }
+
               if (newConfig) {
                 const lines: string[] = ["# Updated via GrubEditor GUI"];
                 for (const [k, v] of Object.entries(newConfig)) {
@@ -777,9 +782,7 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
                 delete fileCache['/etc/default/grub'];
                 delete fileCache['/boot/grub/default'];
               }
-              if (createSnapshot) {
-                createServerSnapshot(reason || "Modified GRUB general configuration");
-              }
+              
               res.end(JSON.stringify({ success: true }));
               resolve();
               return;
@@ -788,6 +791,11 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
             if (pathname === '/api/save-boot-entries') {
               const { newEntries, reason, createSnapshot } = data;
               log('POST /api/save-boot-entries', `Received ${newEntries?.length ?? 0} entries to save (createSnapshot=${createSnapshot}, reason="${reason}")`);
+              
+              if (createSnapshot) {
+                createServerSnapshot(reason || "Modified boot menu entries & ordering");
+              }
+
               if (newEntries && Array.isArray(newEntries)) {
                 const toSave = newEntries.map((e: any) => ({ ...e, originalTitle: e.originalTitle || e.title }));
                 const deletedCount = toSave.filter((e: any) => e.deleted).length;
@@ -799,9 +807,7 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
                 writeProtectedFile(getOverridesPath(), JSON.stringify(toSave, null, 2));
                 log('POST /api/save-boot-entries', 'Write successful');
               }
-              if (createSnapshot) {
-                createServerSnapshot(reason || "Modified boot menu entries & ordering");
-              }
+              
               delete fileCache['/boot/grub/grub.cfg'];
               delete fileCache['/boot/grub2/grub.cfg'];
               res.end(JSON.stringify({ success: true }));
@@ -961,6 +967,16 @@ export async function handleApiRequest(req: IncomingMessage | any, res: ServerRe
               const bashScript = `#!/bin/bash
 set -e
 set -x
+echo "[Bash Runtime] Stage 0: Recording initial state into snapshot..."
+mkdir -p "${snapDir}"
+chmod 755 "${snapDir}"
+cp "${tmpMeta}" "${snapDir}/snapshot_metadata.json"
+chmod 644 "${snapDir}/snapshot_metadata.json"
+
+if [ -n "${snapMeta.default_grub_backup}" ] && [ "${snapMeta.default_grub_backup}" != "null" ] && [ -f "${defTarget}" ]; then cp "${defTarget}" "${snapMeta.default_grub_backup}"; chmod 644 "${snapMeta.default_grub_backup}"; fi
+if [ -n "${snapMeta.grub_cfg_backup}" ] && [ "${snapMeta.grub_cfg_backup}" != "null" ] && [ -f "${cfgTarget}" ]; then cp "${cfgTarget}" "${snapMeta.grub_cfg_backup}"; chmod 644 "${snapMeta.grub_cfg_backup}"; fi
+if [ -n "${snapMeta.bls_entries_backup}" ] && [ "${snapMeta.bls_entries_backup}" != "null" ] && [ -f "${overridesPath}" ]; then cp "${overridesPath}" "${snapMeta.bls_entries_backup}"; chmod 644 "${snapMeta.bls_entries_backup}"; fi
+
 echo "[Bash Runtime] Stage 1: Applying new GRUB configurations..."
 cp "${tmpConfig}" "${defTarget}"
 chmod 644 "${defTarget}"
@@ -988,16 +1004,6 @@ done
 echo "[Bash Runtime] Stage 5: Finalizing deployment..."
 cp "${tmpPatched}" "${cfgTarget}"
 chmod 644 "${cfgTarget}"
-
-echo "[Bash Runtime] Stage 6: Recording final state into snapshot..."
-mkdir -p "${snapDir}"
-chmod 755 "${snapDir}"
-cp "${tmpMeta}" "${snapDir}/snapshot_metadata.json"
-chmod 644 "${snapDir}/snapshot_metadata.json"
-
-if [ -n "${snapMeta.default_grub_backup}" ] && [ "${snapMeta.default_grub_backup}" != "null" ] && [ -f "${defTarget}" ]; then cp "${defTarget}" "${snapMeta.default_grub_backup}"; chmod 644 "${snapMeta.default_grub_backup}"; fi
-if [ -n "${snapMeta.grub_cfg_backup}" ] && [ "${snapMeta.grub_cfg_backup}" != "null" ] && [ -f "${cfgTarget}" ]; then cp "${cfgTarget}" "${snapMeta.grub_cfg_backup}"; chmod 644 "${snapMeta.grub_cfg_backup}"; fi
-if [ -n "${snapMeta.bls_entries_backup}" ] && [ "${snapMeta.bls_entries_backup}" != "null" ] && [ -f "${overridesPath}" ]; then cp "${overridesPath}" "${snapMeta.bls_entries_backup}"; chmod 644 "${snapMeta.bls_entries_backup}"; fi
 
 echo "[Bash Runtime] Execution completed successfully!"
 `;
