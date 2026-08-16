@@ -1,0 +1,12 @@
+import type { ServerResponse } from 'node:http';
+export declare function handleBootEntriesGet(res: ServerResponse): Promise<boolean>;
+export declare function handleGrubConfigGet(res: ServerResponse): boolean;
+export declare function handleDistroGet(res: ServerResponse): boolean;
+export declare function handleScanThemesGet(res: ServerResponse): boolean;
+export declare function handleSnapshotsGet(res: ServerResponse): boolean;
+export declare function handleSnapshotDetailsGet(req: any, res: ServerResponse): boolean;
+export declare function handleSaveGrubConfigPost(data: any, res: ServerResponse): Promise<boolean>;
+export declare function handleSaveBootEntriesPost(data: any, res: ServerResponse): Promise<boolean>;
+export declare function handleRestoreSnapshotPost(data: any, res: ServerResponse): Promise<boolean>;
+export declare function handleTriggerRegenPost(res: ServerResponse): Promise<boolean>;
+export declare function handleDeployPipelinePost(data: any, res: ServerResponse): Promise<boolean>;

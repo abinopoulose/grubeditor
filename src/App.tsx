@@ -58,7 +58,11 @@ export default function App() {
     setHasPendingChanges(true);
   };
 
+let isDeployingLock = false;
+  
   const handleApplyChanges = async (customSnapshotName?: string) => {
+    if (isApplying || isDeployingLock) return;
+    isDeployingLock = true;
     setIsApplying(true);
     setShowModal(true);
     const snapTitle = customSnapshotName || "Manual configuration modification";
@@ -115,6 +119,7 @@ export default function App() {
       setRegenOutput(prev => prev + `\n\n[ERROR] Pipeline Aborted: ${e.message}\n[Deploy] System state remains protected. Authentication may have been dismissed or failed.`);
     } finally {
       setIsApplying(false);
+      isDeployingLock = false;
     }
   };
 

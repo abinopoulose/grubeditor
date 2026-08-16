@@ -13,13 +13,13 @@ A modern, distribution-aware, and Wayland-safe Linux GRUB bootloader customizati
 ## 📦 Install
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/abinopoulose/grubeditor/refs/heads/dev/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/abinopoulose/grubeditor/refs/heads/dev/scripts/install.sh | sudo bash
 ```
 
 ## 🧹 Uninstall
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/abinopoulose/grubeditor/refs/heads/dev/uninstall.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/abinopoulose/grubeditor/refs/heads/dev/scripts/uninstall.sh | sudo bash
 ```
 
 ---

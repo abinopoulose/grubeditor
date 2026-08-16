@@ -103,14 +103,19 @@ export const SnapshotsPanel: React.FC<SnapshotsPanelProps> = ({ onRestore, logAc
     }
 
     return (
-      <div className="space-y-2">
+      <div className="space-y-3">
         {changes.map(c => (
-          <div key={c.key} className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border text-sm bg-indigo-900/20 border-indigo-500/30">
-            <span className="font-mono font-bold min-w-[200px] text-indigo-300">{c.name}</span>
-            <div className="flex items-center gap-2 flex-1 overflow-hidden">
-              <span className="truncate text-rose-400/80">{c.old}</span>
-              <span className="text-slate-500 font-bold">{'->'}</span>
-              <span className="font-bold truncate text-emerald-400">{c.new}</span>
+          <div key={c.key} className="flex flex-col p-4 rounded-xl border text-sm bg-[#0a1024] border-indigo-500/20 shadow-md">
+            <span className="font-extrabold text-indigo-300 mb-2 pb-2 border-b border-white/5">{c.name}</span>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col">
+                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-1">Current Live System</span>
+                <span className="font-mono text-rose-400 font-medium truncate">{c.old}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] uppercase font-bold text-emerald-500 tracking-wider mb-1">Snapshot Checkpoint</span>
+                <span className="font-mono text-emerald-400 font-bold truncate">{c.new}</span>
+              </div>
             </div>
           </div>
         ))}
@@ -123,55 +128,108 @@ export const SnapshotsPanel: React.FC<SnapshotsPanelProps> = ({ onRestore, logAc
     const { details, liveEntries } = viewingSnapshot;
     const snapOverrides: BootEntry[] = details.bootEntries || [];
     
-    if (snapOverrides.length === 0) {
-      return <div className="text-slate-400 text-sm italic py-2">No boot menu overrides in this checkpoint.</div>;
-    }
+    // Find all IDs that have an override in the snapshot, OR have an active override in the live system
+    const allIds = Array.from(new Set([
+      ...snapOverrides.map(o => o.id),
+      ...liveEntries.filter(e => e.title !== e.originalTitle || e.deleted).map(e => e.id)
+    ]));
 
-    // Filter to ONLY show entries that are actually different from the base system
-    const changedOverrides = snapOverrides.filter((override) => {
-      const live = liveEntries.find((e: any) => e.id === override.id);
-      const baseTitle = override.originalTitle || (live ? live.originalTitle : null) || (live ? live.title : '(default)');
-      const baseHidden = false;
-      return (override.title !== baseTitle) || (override.deleted !== baseHidden);
-    });
+    const changes = allIds.map(id => {
+      const live = liveEntries.find((e: any) => e.id === id);
+      const snap = snapOverrides.find(o => o.id === id);
+      
+      const baseTitle = (live ? live.originalTitle : null) || (snap ? snap.originalTitle : null) || id;
+      
+      const liveTitle = live ? live.title : baseTitle;
+      const liveHidden = live ? !!live.deleted : false;
+      
+      const snapTitle = snap ? snap.title : baseTitle;
+      const snapHidden = snap ? !!snap.deleted : false;
+      
+      const liveOrder = liveEntries.findIndex((e: any) => e.id === id);
+      const snapOrder = snapOverrides.length > 0 
+        ? snapOverrides.findIndex(o => o.id === id)
+        : -1;
+      
+      let orderChanged = false;
+      let displaySnapOrder = '';
+      if (snapOrder !== -1 && liveOrder !== -1 && liveOrder !== snapOrder) {
+        orderChanged = true;
+        displaySnapOrder = `Position #${snapOrder + 1}`;
+      }
+      
+      return {
+        id,
+        baseTitle,
+        liveTitle,
+        liveHidden,
+        snapTitle,
+        snapHidden,
+        liveOrder,
+        snapOrder,
+        displaySnapOrder,
+        orderChanged,
+        hasChanged: liveTitle !== snapTitle || liveHidden !== snapHidden || orderChanged
+      };
+    }).filter(c => c.hasChanged);
 
-    if (changedOverrides.length === 0) {
-      return <div className="text-slate-400 text-sm italic py-2">No boot entry changes exist in this checkpoint compared to system defaults.</div>;
+    if (changes.length === 0) {
+      if (snapOverrides.length === 0) {
+        return <div className="text-slate-400 text-sm italic py-2">No boot menu overrides in this checkpoint.</div>;
+      }
+      return <div className="text-slate-400 text-sm italic py-2">No boot entry changes exist in this checkpoint compared to current system.</div>;
     }
 
     return (
-      <div className="space-y-2">
-        {changedOverrides.map((override, idx) => {
-          const live = liveEntries.find((e: any) => e.id === override.id);
-          const baseTitle = override.originalTitle || (live ? live.originalTitle : null) || (live ? live.title : '(default)');
-          const baseHidden = false;
-          
-          const titleChanged = override.title !== baseTitle;
-          const hiddenChanged = override.deleted !== baseHidden;
+      <div className="space-y-3">
+        {changes.map((c, idx) => {
+          const titleChanged = c.liveTitle !== c.snapTitle;
+          const hiddenChanged = c.liveHidden !== c.snapHidden;
 
           return (
-            <div key={override.id} className="p-3 rounded-lg border flex flex-col gap-2 text-sm bg-indigo-900/20 border-indigo-500/30">
-              <div className="font-bold text-slate-200">
-                {idx + 1}. {baseTitle}
+            <div key={c.id} className="p-4 rounded-xl border flex flex-col gap-3 text-sm bg-[#0a1024] border-indigo-500/20 shadow-md">
+              <div className="font-extrabold text-slate-200 pb-2 border-b border-white/5">
+                {idx + 1}. {c.baseTitle}
               </div>
-              <div className="pl-4 flex flex-col gap-1">
-                {titleChanged && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-400 w-16">Title:</span>
-                    <span className="truncate max-w-[150px] text-rose-400/80">{baseTitle}</span>
-                    <span className="text-slate-500 font-bold">{'->'}</span>
-                    <span className="font-bold truncate text-emerald-400">{override.title || baseTitle}</span>
+              
+              {titleChanged && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-1">Current Title</span>
+                    <span className="font-mono text-rose-400 font-medium truncate">{c.liveTitle}</span>
                   </div>
-                )}
-                {hiddenChanged && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-400 w-16">State:</span>
-                    <span className="text-rose-400/80">Visible</span>
-                    <span className="text-slate-500 font-bold">{'->'}</span>
-                    <span className="font-bold text-emerald-400">{override.deleted ? 'Hidden' : 'Visible'}</span>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase font-bold text-emerald-500 tracking-wider mb-1">Snapshot Title</span>
+                    <span className="font-mono text-emerald-400 font-bold truncate">{c.snapTitle}</span>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
+              
+              {hiddenChanged && (
+                <div className="grid grid-cols-2 gap-4 pt-1">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-1">Current State</span>
+                    <span className="font-mono text-rose-400 font-medium">{c.liveHidden ? 'Hidden' : 'Visible'}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase font-bold text-emerald-500 tracking-wider mb-1">Snapshot State</span>
+                    <span className="font-mono text-emerald-400 font-bold">{c.snapHidden ? 'Hidden' : 'Visible'}</span>
+                  </div>
+                </div>
+              )}
+              
+              {c.orderChanged && (
+                <div className="grid grid-cols-2 gap-4 pt-1">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-1">Current Boot Order</span>
+                    <span className="font-mono text-rose-400 font-medium">Position #{c.liveOrder + 1}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase font-bold text-emerald-500 tracking-wider mb-1">Snapshot Boot Order</span>
+                    <span className="font-mono text-emerald-400 font-bold">{c.displaySnapOrder}</span>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
