@@ -21,19 +21,14 @@ export function createServerSnapshot(description: string, getOverridesPath: () =
   
   const overridesPath = getOverridesPath();
 
-  const defaultGrubBackup = path.join(targetDir, 'default_grub.bak');
-  const cfgBackupPath = path.join(targetDir, 'grub.cfg.bak');
-  const ovBackupPath = path.join(targetDir, 'grub-editor-entries.json.bak');
-  
   const date_string = `${timestamp} (UTC Timestamp)`;
   const snapshotData = {
     timestamp,
     date_string,
     description: description || "Auto-backup",
-    default_grub_backup: defaultGrubBackup,
-    grub_cfg_backup: cfgBackupPath,
-    bls_entries_backup: ovBackupPath,
-    warnings: []
+    grub_dir_backup: path.join(targetDir, 'grub'),
+    default_grub_backup: path.join(targetDir, 'default_grub'),
+    loader_dir_backup: path.join(targetDir, 'loader')
   };
 
   const tmpMeta = `/tmp/grub-editor-snap-meta-${Date.now()}`;
@@ -47,18 +42,19 @@ cp "${tmpMeta}" "${targetDir}/snapshot_metadata.json"
 chmod 644 "${targetDir}/snapshot_metadata.json"
 
 if [ -f "\${grubDefaultPath}" ]; then
-  cp "\${grubDefaultPath}" "${defaultGrubBackup}"
-  chmod 644 "${defaultGrubBackup}"
+  cp -a "\${grubDefaultPath}" "${snapshotData.default_grub_backup}"
 fi
 
-if [ -f "\${grubCfgPath}" ]; then
-  cp "\${grubCfgPath}" "${cfgBackupPath}"
-  chmod 644 "${cfgBackupPath}"
+grubDir=$(dirname "\${grubCfgPath}")
+if [ -d "\${grubDir}" ]; then
+  cp -a "\${grubDir}" "${snapshotData.grub_dir_backup}"
+  if [ ! -f "${snapshotData.grub_dir_backup}/grub-editor-entries.json" ]; then
+    echo '[]' > "${snapshotData.grub_dir_backup}/grub-editor-entries.json"
+  fi
 fi
 
-if [ -f "${overridesPath}" ]; then
-  cp "${overridesPath}" "${ovBackupPath}"
-  chmod 644 "${ovBackupPath}"
+if [ -d "/boot/loader" ]; then
+  cp -a "/boot/loader" "${snapshotData.loader_dir_backup}"
 fi
 # --- END SNAPSHOT ---
 `;

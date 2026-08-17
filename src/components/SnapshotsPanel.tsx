@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Snapshot, BootEntry } from '../types';
+import { Snapshot } from '../types';
 import { ApiService, formatSnapshotDate } from '../services/api';
 import { RotateCcw, Clock, CheckCircle2, Shield, History, Sparkles, Eye, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,7 +15,7 @@ export const SnapshotsPanel: React.FC<SnapshotsPanelProps> = ({ onRestore, logAc
   const [loadingDetailsId, setLoadingDetailsId] = useState<number | null>(null);
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
 
-  const [viewingSnapshot, setViewingSnapshot] = useState<{snap: Snapshot, details: any, liveConfig: any, liveEntries: BootEntry[]} | null>(null);
+  const [viewingSnapshot, setViewingSnapshot] = useState<{snap: Snapshot, diff: string} | null>(null);
 
   const loadSnaps = () => {
     ApiService.getSnapshots().then(data => setSnapshots(data));
@@ -26,13 +26,15 @@ export const SnapshotsPanel: React.FC<SnapshotsPanelProps> = ({ onRestore, logAc
   }, []);
 
   const handleView = async (snap: Snapshot) => {
+    console.log(`[SnapshotsPanel] "Review Changes" clicked for snapshot: "${snap.description}" (ID: ${snap.timestamp})`);
     setLoadingDetailsId(snap.timestamp);
     try {
       const details = await ApiService.getSnapshotDetails(snap.timestamp);
-      const liveConfig = await ApiService.getGrubConfig();
-      const liveEntries = await ApiService.getBootEntries();
-      setViewingSnapshot({ snap, details, liveConfig, liveEntries });
+      const diffText = details.diff || (details as any).config ? "Snapshot was created with an older version of GrubEditor and does not support raw text diffs." : "No differences found or diff was empty.";
+      console.log(`[SnapshotsPanel] Snapshot ${snap.timestamp} diff loaded:\n`, diffText);
+      setViewingSnapshot({ snap, diff: diffText });
     } catch (e: any) {
+      console.error(`[SnapshotsPanel] Error loading snapshot details:`, e);
       setNotification({ type: 'error', message: `Failed to load details: ${e.message}` });
       setTimeout(() => setNotification(null), 5000);
     } finally {
@@ -55,186 +57,6 @@ export const SnapshotsPanel: React.FC<SnapshotsPanelProps> = ({ onRestore, logAc
       setRestoringId(null);
     }
     setTimeout(() => setNotification(null), 5000);
-  };
-
-  const renderConfigDiff = () => {
-    if (!viewingSnapshot) return null;
-    const { details, liveConfig, liveEntries } = viewingSnapshot;
-    const snapConfig = details.config || {};
-    
-    const allKeys = Array.from(new Set([...Object.keys(snapConfig), ...Object.keys(liveConfig)])).sort();
-    const changes: any[] = [];
-    
-    allKeys.forEach(k => {
-      let liveVal = liveConfig[k] ?? '(none)';
-      let snapVal = snapConfig[k] ?? '(none)';
-      
-      let name = k;
-      if (k === 'GRUB_DEFAULT') {
-        name = 'Default Startup Entry';
-        // Map to entry name if possible
-        const mapEntry = (v: string) => {
-          if (!isNaN(Number(v))) {
-            const entry = liveEntries[Number(v)];
-            return entry ? (entry.title || entry.id) : `Index ${v}`;
-          }
-          return v;
-        };
-        liveVal = mapEntry(liveVal);
-        snapVal = mapEntry(snapVal);
-      }
-      if (k === 'GRUB_TIMEOUT') {
-        name = 'Countdown Delay & Timeout';
-        liveVal = (liveVal === '-1' || liveVal === -1) ? 'DISABLED' : `${liveVal} sec`;
-        snapVal = (snapVal === '-1' || snapVal === -1) ? 'DISABLED' : `${snapVal} sec`;
-      }
-      if (k !== 'GRUB_DEFAULT' && k !== 'GRUB_TIMEOUT') {
-        return;
-      }
-
-      const hasChanged = liveVal !== snapVal;
-      if (hasChanged) {
-        changes.push({ key: k, name, old: liveVal, new: snapVal });
-      }
-    });
-
-    if (changes.length === 0) {
-      return <div className="text-slate-400 text-sm italic py-2">No configuration changes will occur upon rollback.</div>;
-    }
-
-    return (
-      <div className="space-y-3">
-        {changes.map(c => (
-          <div key={c.key} className="flex flex-col p-4 rounded-xl border text-sm bg-[#0a1024] border-indigo-500/20 shadow-md">
-            <span className="font-extrabold text-indigo-300 mb-2 pb-2 border-b border-white/5">{c.name}</span>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col">
-                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-1">Current Live System</span>
-                <span className="font-mono text-rose-400 font-medium truncate">{c.old}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[10px] uppercase font-bold text-emerald-500 tracking-wider mb-1">Snapshot Checkpoint</span>
-                <span className="font-mono text-emerald-400 font-bold truncate">{c.new}</span>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  const renderBootEntriesDiff = () => {
-    if (!viewingSnapshot) return null;
-    const { details, liveEntries } = viewingSnapshot;
-    const snapOverrides: BootEntry[] = details.bootEntries || [];
-    
-    // Find all IDs that have an override in the snapshot, OR have an active override in the live system
-    const allIds = Array.from(new Set([
-      ...snapOverrides.map(o => o.id),
-      ...liveEntries.filter(e => e.title !== e.originalTitle || e.deleted).map(e => e.id)
-    ]));
-
-    const changes = allIds.map(id => {
-      const live = liveEntries.find((e: any) => e.id === id);
-      const snap = snapOverrides.find(o => o.id === id);
-      
-      const baseTitle = (live ? live.originalTitle : null) || (snap ? snap.originalTitle : null) || id;
-      
-      const liveTitle = live ? live.title : baseTitle;
-      const liveHidden = live ? !!live.deleted : false;
-      
-      const snapTitle = snap ? snap.title : baseTitle;
-      const snapHidden = snap ? !!snap.deleted : false;
-      
-      const liveOrder = liveEntries.findIndex((e: any) => e.id === id);
-      const snapOrder = snapOverrides.length > 0 
-        ? snapOverrides.findIndex(o => o.id === id)
-        : -1;
-      
-      let orderChanged = false;
-      let displaySnapOrder = '';
-      if (snapOrder !== -1 && liveOrder !== -1 && liveOrder !== snapOrder) {
-        orderChanged = true;
-        displaySnapOrder = `Position #${snapOrder + 1}`;
-      }
-      
-      return {
-        id,
-        baseTitle,
-        liveTitle,
-        liveHidden,
-        snapTitle,
-        snapHidden,
-        liveOrder,
-        snapOrder,
-        displaySnapOrder,
-        orderChanged,
-        hasChanged: liveTitle !== snapTitle || liveHidden !== snapHidden || orderChanged
-      };
-    }).filter(c => c.hasChanged);
-
-    if (changes.length === 0) {
-      if (snapOverrides.length === 0) {
-        return <div className="text-slate-400 text-sm italic py-2">No boot menu overrides in this checkpoint.</div>;
-      }
-      return <div className="text-slate-400 text-sm italic py-2">No boot entry changes exist in this checkpoint compared to current system.</div>;
-    }
-
-    return (
-      <div className="space-y-3">
-        {changes.map((c, idx) => {
-          const titleChanged = c.liveTitle !== c.snapTitle;
-          const hiddenChanged = c.liveHidden !== c.snapHidden;
-
-          return (
-            <div key={c.id} className="p-4 rounded-xl border flex flex-col gap-3 text-sm bg-[#0a1024] border-indigo-500/20 shadow-md">
-              <div className="font-extrabold text-slate-200 pb-2 border-b border-white/5">
-                {idx + 1}. {c.baseTitle}
-              </div>
-              
-              {titleChanged && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-1">Current Title</span>
-                    <span className="font-mono text-rose-400 font-medium truncate">{c.liveTitle}</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] uppercase font-bold text-emerald-500 tracking-wider mb-1">Snapshot Title</span>
-                    <span className="font-mono text-emerald-400 font-bold truncate">{c.snapTitle}</span>
-                  </div>
-                </div>
-              )}
-              
-              {hiddenChanged && (
-                <div className="grid grid-cols-2 gap-4 pt-1">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-1">Current State</span>
-                    <span className="font-mono text-rose-400 font-medium">{c.liveHidden ? 'Hidden' : 'Visible'}</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] uppercase font-bold text-emerald-500 tracking-wider mb-1">Snapshot State</span>
-                    <span className="font-mono text-emerald-400 font-bold">{c.snapHidden ? 'Hidden' : 'Visible'}</span>
-                  </div>
-                </div>
-              )}
-              
-              {c.orderChanged && (
-                <div className="grid grid-cols-2 gap-4 pt-1">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-1">Current Boot Order</span>
-                    <span className="font-mono text-rose-400 font-medium">Position #{c.liveOrder + 1}</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] uppercase font-bold text-emerald-500 tracking-wider mb-1">Snapshot Boot Order</span>
-                    <span className="font-mono text-emerald-400 font-bold">{c.displaySnapOrder}</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
   };
 
   return (
@@ -267,15 +89,19 @@ export const SnapshotsPanel: React.FC<SnapshotsPanelProps> = ({ onRestore, logAc
               <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
                 <section>
                   <h3 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" /> General Configuration
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" /> Raw File Difference
                   </h3>
-                  {renderConfigDiff()}
-                </section>
-                <section>
-                  <h3 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Boot Menu Options
-                  </h3>
-                  {renderBootEntriesDiff()}
+                  <div className="p-4 rounded-xl border bg-[#0a1024] border-indigo-500/20 shadow-md overflow-x-auto text-xs font-mono">
+                    <pre className="text-slate-300">
+                      {viewingSnapshot.diff.split('\n').map((line, i) => {
+                        let color = 'text-slate-400';
+                        if (line.startsWith('+')) color = 'text-emerald-400';
+                        else if (line.startsWith('-')) color = 'text-rose-400';
+                        else if (line.startsWith('@')) color = 'text-blue-400 font-bold';
+                        return <div key={i} className={color}>{line || ' '}</div>;
+                      })}
+                    </pre>
+                  </div>
                 </section>
               </div>
             </motion.div>

@@ -162,37 +162,36 @@ export function handleSnapshotDetailsGet(req: any, res: ServerResponse) {
     }
     
     const snapData = JSON.parse(readProtectedFile(metaPath));
-    const config: Record<string, string> = {};
-    if (snapData.default_grub_backup) {
+    let diffOutput = "";
+
+    const execDiff = (cmd: string) => {
       try {
-        const content = readProtectedFile(snapData.default_grub_backup);
-        content.split('\n').forEach((line: string) => {
-          const trimmed = line.trim();
-          if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
-            const idx = trimmed.indexOf('=');
-            const key = trimmed.substring(0, idx).trim();
-            let val = trimmed.substring(idx + 1).trim();
-            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-              val = val.substring(1, val.length - 1);
-            }
-            config[key] = val;
-          }
-        });
-      } catch (e) {
-        logError('GET /api/snapshot-details', 'Failed to read default_grub_backup', e);
+        const out = execSync(cmd, { encoding: 'utf8' });
+        diffOutput += out;
+      } catch (e: any) {
+        if (e.stdout) diffOutput += e.stdout.toString();
       }
+    };
+
+    if (snapData.default_grub_backup) {
+       const livePath = fs.existsSync('/etc/default/grub') ? '/etc/default/grub' : '/boot/grub/default';
+       execDiff(`pkexec /usr/bin/grub-editor-helper bash -c "diff -u '${snapData.default_grub_backup}' '${livePath}' || true"`);
     }
 
-    let bootEntries: any[] = [];
-    if (snapData.bls_entries_backup) {
-      try {
-        bootEntries = JSON.parse(readProtectedFile(snapData.bls_entries_backup));
-      } catch (e) {
-        logError('GET /api/snapshot-details', 'Failed to read bls_entries_backup', e);
-      }
+    if (snapData.grub_dir_backup) {
+       const liveGrubDir = fs.existsSync('/boot/grub2') ? '/boot/grub2' : '/boot/grub';
+       execDiff(`pkexec /usr/bin/grub-editor-helper bash -c "diff -ur --exclude='*.bak' --exclude='*.old' '${snapData.grub_dir_backup}' '${liveGrubDir}' || true"`);
     }
     
-    sendJsonResponse(res, { config, bootEntries });
+    if (snapData.loader_dir_backup && fs.existsSync(snapData.loader_dir_backup)) {
+       execDiff(`pkexec /usr/bin/grub-editor-helper bash -c "diff -ur '${snapData.loader_dir_backup}' '/boot/loader' || true"`);
+    }
+
+    if (!diffOutput.trim()) {
+      diffOutput = "No differences found between this snapshot and the active system.";
+    }
+
+    sendJsonResponse(res, { diff: diffOutput });
   } catch (e: any) {
     sendErrorResponse(res, e.message);
   }
@@ -205,11 +204,13 @@ export async function handleSaveGrubConfigPost(data: any, res: ServerResponse) {
   
   let snapScript = "";
   let tmpMeta = "";
+  let snapDirToDelete = "";
   if (createSnapshot) {
     const snapResult = createServerSnapshot(reason || "Modified GRUB general configuration", getOverridesPath, false);
     if (snapResult) {
       snapScript = snapResult.script;
       tmpMeta = snapResult.tmpMeta;
+      snapDirToDelete = path.dirname(snapResult.snapshotData.grub_dir_backup);
     }
   }
 
@@ -236,18 +237,39 @@ else
   grubDefaultPath="/boot/grub/default"
 fi
 
+TEMP_BACKUP_DIR="/tmp/grub-editor-rollback-${Date.now()}"
+
+rollback() {
+  set +e
+  echo "[Bash Runtime] ERROR CAUGHT! Executing atomic rollback from \${TEMP_BACKUP_DIR}..."
+  if [ -f "\${TEMP_BACKUP_DIR}/default_grub" ]; then
+    cp -a "\${TEMP_BACKUP_DIR}/default_grub" "\${grubDefaultPath}"
+  else
+    rm -f "\${grubDefaultPath}" 2>/dev/null || true
+  fi
+  echo "[Bash Runtime] Rollback completed."
+  rm -rf "\${TEMP_BACKUP_DIR}"
+  ${snapDirToDelete ? `rm -rf "${snapDirToDelete}" 2>/dev/null || true` : ""}
+  exit 1
+}
+
+echo "[Bash Runtime] Creating temporary atomic backup at \${TEMP_BACKUP_DIR}..."
+mkdir -p "\${TEMP_BACKUP_DIR}"
+if [ -f "\${grubDefaultPath}" ]; then
+  cp -a "\${grubDefaultPath}" "\${TEMP_BACKUP_DIR}/default_grub"
+fi
+
+trap 'rollback' ERR
+
 ${snapScript}
 
-if [ -f /etc/default/grub ]; then
-  defTarget="/etc/default/grub"
-elif [ -f /boot/grub/default ]; then
-  defTarget="/boot/grub/default"
-else
-  defTarget="/etc/default/grub"
-fi
-cp "${tmpPath}" "\${defTarget}"
-chmod 644 "\${defTarget}"
+echo "[Bash Runtime] Applying config..."
+cp "${tmpPath}" "\${grubDefaultPath}"
+chmod 644 "\${grubDefaultPath}"
 rm -f "${tmpPath}"
+
+trap - ERR
+rm -rf "\${TEMP_BACKUP_DIR}"
 `;
     const scriptPath = path.join(os.tmpdir(), `grub-editor-save-config-${Date.now()}.sh`);
     fs.writeFileSync(scriptPath, bashScript);
@@ -277,11 +299,13 @@ export async function handleSaveBootEntriesPost(data: any, res: ServerResponse) 
   
   let snapScript = "";
   let tmpMeta = "";
+  let snapDirToDelete = "";
   if (createSnapshot) {
     const snapResult = createServerSnapshot(reason || "Modified boot menu entries & ordering", getOverridesPath, false);
     if (snapResult) {
       snapScript = snapResult.script;
       tmpMeta = snapResult.tmpMeta;
+      snapDirToDelete = path.dirname(snapResult.snapshotData.grub_dir_backup);
     }
   }
 
@@ -313,9 +337,37 @@ else
   grubDefaultPath="/boot/grub/default"
 fi
 
+TEMP_BACKUP_DIR="/tmp/grub-editor-rollback-${Date.now()}"
+
+rollback() {
+  set +e
+  echo "[Bash Runtime] ERROR CAUGHT! Executing atomic rollback from \${TEMP_BACKUP_DIR}..."
+  if [ -f "\${TEMP_BACKUP_DIR}/entries.json" ]; then
+    cp "\${TEMP_BACKUP_DIR}/entries.json" "${targetPath}" 2>/dev/null || true
+  else
+    rm -f "${targetPath}" 2>/dev/null || true
+  fi
+  echo "[Bash Runtime] Rollback completed."
+  rm -rf "\${TEMP_BACKUP_DIR}"
+  ${snapDirToDelete ? `rm -rf "${snapDirToDelete}" 2>/dev/null || true` : ""}
+  exit 1
+}
+
+echo "[Bash Runtime] Creating temporary atomic backup at \${TEMP_BACKUP_DIR}..."
+mkdir -p "\${TEMP_BACKUP_DIR}"
+if [ -f "${targetPath}" ]; then
+  cp -a "${targetPath}" "\${TEMP_BACKUP_DIR}/entries.json"
+fi
+
+trap 'rollback' ERR
+
 ${snapScript}
+echo "[Bash Runtime] Applying overrides..."
 cp "${tmpEntries}" "${targetPath}"
 chmod 644 "${targetPath}"
+
+trap - ERR
+rm -rf "\${TEMP_BACKUP_DIR}"
 `;
       const scriptPath = `/tmp/grub-editor-save-entries-${Date.now()}.sh`;
       fs.writeFileSync(scriptPath, bashScript);
@@ -386,21 +438,16 @@ fi
 ${snapScript}
 
 if [ -n "${snapData.default_grub_backup}" ] && [ "${snapData.default_grub_backup}" != "null" ] && [ -f "${snapData.default_grub_backup}" ]; then
-  cp "${snapData.default_grub_backup}" "\${defTarget}"
-  chmod 644 "\${defTarget}"
+  cp -a "${snapData.default_grub_backup}" "\${defTarget}"
 fi
 
-if [ -n "${snapData.grub_cfg_backup}" ] && [ "${snapData.grub_cfg_backup}" != "null" ] && [ -f "${snapData.grub_cfg_backup}" ]; then
-  cp "${snapData.grub_cfg_backup}" "\${cfgTarget}"
-  chmod 644 "\${cfgTarget}"
+if [ -n "${snapData.grub_dir_backup}" ] && [ "${snapData.grub_dir_backup}" != "null" ] && [ -d "${snapData.grub_dir_backup}" ]; then
+  grubDir=$(dirname "\${cfgTarget}")
+  cp -a "${snapData.grub_dir_backup}/." "\${grubDir}/"
 fi
 
-if [ -n "${snapData.bls_entries_backup}" ] && [ "${snapData.bls_entries_backup}" != "null" ] && [ -f "${snapData.bls_entries_backup}" ]; then
-  cp "${snapData.bls_entries_backup}" "${overridesPath}"
-  chmod 644 "${overridesPath}"
-else
-  echo '[]' > "${overridesPath}"
-  chmod 644 "${overridesPath}"
+if [ -n "${snapData.loader_dir_backup}" ] && [ "${snapData.loader_dir_backup}" != "null" ] && [ -d "${snapData.loader_dir_backup}" ]; then
+  cp -a "${snapData.loader_dir_backup}/." "/boot/loader/"
 fi
 `;
   
@@ -441,15 +488,38 @@ export async function handleTriggerRegenPost(res: ServerResponse) {
   
   const bashScript = `#!/bin/bash
 set -e
+
+TEMP_BACKUP_DIR="/tmp/grub-editor-rollback-${Date.now()}"
+
+if [ -f /boot/grub2/grub.cfg ]; then
+  cfgTarget="/boot/grub2/grub.cfg"
+else
+  cfgTarget="/boot/grub/grub.cfg"
+fi
+
+rollback() {
+  set +e
+  echo "[Bash Runtime] ERROR CAUGHT! Executing atomic rollback from \${TEMP_BACKUP_DIR}..."
+  if [ -f "\${TEMP_BACKUP_DIR}/grub.cfg" ]; then
+    cp -a "\${TEMP_BACKUP_DIR}/grub.cfg" "\${cfgTarget}" 2>/dev/null || true
+  fi
+  echo "[Bash Runtime] Rollback completed."
+  rm -rf "\${TEMP_BACKUP_DIR}"
+  exit 1
+}
+
+echo "[Bash Runtime] Stage 0: Creating temporary atomic backup at \${TEMP_BACKUP_DIR}..."
+mkdir -p "\${TEMP_BACKUP_DIR}"
+if [ -f "\${cfgTarget}" ]; then
+  cp -a "\${cfgTarget}" "\${TEMP_BACKUP_DIR}/grub.cfg"
+fi
+
+trap 'rollback' ERR
+
 echo "[Bash Runtime] Stage 1: Running update-grub..."
 update-grub 2>&1
 
 if [ "${hasOverrides}" = "true" ]; then
-  if [ -f /boot/grub2/grub.cfg ]; then
-    cfgTarget="/boot/grub2/grub.cfg"
-  else
-    cfgTarget="/boot/grub/grub.cfg"
-  fi
   echo "[Bash Runtime] Stage 2: Exposing raw configuration for Node.js patching..."
   cat "\${cfgTarget}" > "${rawCfgOut}"
   chmod 666 "${rawCfgOut}"
@@ -461,7 +531,7 @@ if [ "${hasOverrides}" = "true" ]; then
     COUNT=$((COUNT+1))
     if [ $COUNT -gt 60 ]; then
       echo "[Bash Runtime] ERROR: Timeout waiting for Node.js to patch configuration." >&2
-      exit 1
+      rollback
     fi
   done
 
@@ -469,6 +539,9 @@ if [ "${hasOverrides}" = "true" ]; then
   cp "${tmpPatched}" "\${cfgTarget}"
   chmod 644 "\${cfgTarget}"
 fi
+
+trap - ERR
+rm -rf "\${TEMP_BACKUP_DIR}"
 echo "[Bash Runtime] Regeneration completed successfully!"
 `;
   fs.writeFileSync(scriptPath, bashScript);

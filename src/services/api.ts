@@ -161,7 +161,7 @@ export const ApiService = {
     return await res.json();
   },
 
-  async getSnapshotDetails(timestamp: number): Promise<{ config: Record<string, string>, bootEntries: BootEntry[] }> {
+  async getSnapshotDetails(timestamp: number): Promise<{ diff: string }> {
     if (isTauri) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');

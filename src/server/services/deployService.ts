@@ -33,9 +33,9 @@ export async function executeDeployPipeline(config: Record<string, string>, boot
     timestamp,
     date_string: `${timestamp} (UTC Timestamp)`,
     description: snapTitle,
-    default_grub_backup: path.join(snapDir, 'default_grub.bak'),
-    grub_cfg_backup: path.join(snapDir, 'grub.cfg.bak'),
-    bls_entries_backup: path.join(snapDir, 'grub-editor-entries.json.bak')
+    grub_dir_backup: path.join(snapDir, 'grub'),
+    default_grub_backup: path.join(snapDir, 'default_grub'),
+    loader_dir_backup: path.join(snapDir, 'loader')
   };
   const tmpMeta = `/tmp/grub-editor-deploy-meta-${Date.now()}`;
   fs.writeFileSync(tmpMeta, JSON.stringify(snapMeta, null, 2));
@@ -57,20 +57,72 @@ if [ -f /etc/default/grub ]; then
 else
   defTarget="/boot/grub/default"
 fi
+grubDir=$(dirname "\${cfgTarget}")
 
-echo "[Bash Runtime] Stage 1: Initializing snapshot in ${snapDir}..."
+TEMP_BACKUP_DIR="/tmp/grub-editor-rollback-${Date.now()}"
+
+rollback() {
+  set +e
+  echo "[Bash Runtime] ERROR CAUGHT! Executing atomic rollback from \${TEMP_BACKUP_DIR}..."
+  if [ -f "\${TEMP_BACKUP_DIR}/default_grub" ]; then
+    cp -a "\${TEMP_BACKUP_DIR}/default_grub" "\${defTarget}"
+  else
+    rm -f "\${defTarget}" 2>/dev/null || true
+  fi
+  if [ -d "\${TEMP_BACKUP_DIR}/grub" ]; then
+    rm -f "${overridesPath}" 2>/dev/null || true
+    cp -a "\${TEMP_BACKUP_DIR}/grub/." "\${grubDir}/"
+  fi
+  if [ -d "\${TEMP_BACKUP_DIR}/loader" ]; then
+    cp -a "\${TEMP_BACKUP_DIR}/loader/." "/boot/loader/"
+  fi
+  echo "[Bash Runtime] Rollback completed. System restored to original state."
+  rm -rf "\${TEMP_BACKUP_DIR}"
+  rm -rf "${snapDir}" 2>/dev/null || true
+  exit 1
+}
+
+echo "[Bash Runtime] Stage 0: Creating temporary atomic backup at \${TEMP_BACKUP_DIR}..."
+mkdir -p "\${TEMP_BACKUP_DIR}"
+if [ -f "\${defTarget}" ]; then
+  cp -a "\${defTarget}" "\${TEMP_BACKUP_DIR}/default_grub"
+fi
+if [ -d "\${grubDir}" ]; then
+  cp -a "\${grubDir}" "\${TEMP_BACKUP_DIR}/grub"
+fi
+if [ -d "/boot/loader" ]; then
+  cp -a "/boot/loader" "\${TEMP_BACKUP_DIR}/loader"
+fi
+
+trap 'rollback' ERR
+
+echo "[Bash Runtime] Stage 1: Initializing vault snapshot in ${snapDir}..."
 mkdir -p "${snapDir}"
 chmod 755 "${snapDir}"
 cp "${tmpMeta}" "${snapDir}/snapshot_metadata.json"
 chmod 644 "${snapDir}/snapshot_metadata.json"
 
-if [ -n "${snapMeta.default_grub_backup}" ] && [ "${snapMeta.default_grub_backup}" != "null" ] && [ -f "\${defTarget}" ]; then cp "\${defTarget}" "${snapMeta.default_grub_backup}"; chmod 644 "${snapMeta.default_grub_backup}"; fi
-if [ -n "${snapMeta.grub_cfg_backup}" ] && [ "${snapMeta.grub_cfg_backup}" != "null" ] && [ -f "\${cfgTarget}" ]; then cp "\${cfgTarget}" "${snapMeta.grub_cfg_backup}"; chmod 644 "${snapMeta.grub_cfg_backup}"; fi
-if [ -n "${snapMeta.bls_entries_backup}" ] && [ "${snapMeta.bls_entries_backup}" != "null" ] && [ -f "${overridesPath}" ]; then cp "${overridesPath}" "${snapMeta.bls_entries_backup}"; chmod 644 "${snapMeta.bls_entries_backup}"; fi
+if [ -f "\${defTarget}" ]; then
+  cp -a "\${defTarget}" "${snapMeta.default_grub_backup}"
+fi
+
+if [ -d "\${grubDir}" ]; then
+  cp -a "\${grubDir}" "${snapMeta.grub_dir_backup}"
+  if [ ! -f "${snapMeta.grub_dir_backup}/grub-editor-entries.json" ]; then
+    echo '[]' > "${snapMeta.grub_dir_backup}/grub-editor-entries.json"
+  fi
+fi
+
+if [ -d "/boot/loader" ]; then
+  cp -a "/boot/loader" "${snapMeta.loader_dir_backup}"
+fi
 
 echo "[Bash Runtime] Stage 2: Applying new GRUB configurations..."
+echo "[Bash Runtime] Copying \${tmpConfig} to \${defTarget}"
 cp "${tmpConfig}" "\${defTarget}"
 chmod 644 "\${defTarget}"
+
+echo "[Bash Runtime] Copying \${tmpEntries} to \${overridesPath}"
 cp "${tmpEntries}" "${overridesPath}"
 chmod 644 "${overridesPath}"
 
@@ -88,13 +140,17 @@ while [ ! -f "${tmpPatched}" ]; do
   COUNT=$((COUNT+1))
   if [ $COUNT -gt 60 ]; then
     echo "[Bash Runtime] ERROR: Timeout waiting for Node.js to patch configuration." >&2
-    exit 1
+    rollback
   fi
 done
 
 echo "[Bash Runtime] Stage 6: Finalizing deployment..."
 cp "${tmpPatched}" "\${cfgTarget}"
 chmod 644 "\${cfgTarget}"
+
+echo "[Bash Runtime] Stage 7: Deployment successful! Cleaning up temporary backup..."
+trap - ERR
+rm -rf "\${TEMP_BACKUP_DIR}"
 
 echo "[Bash Runtime] Execution completed successfully!"
 `;
@@ -111,7 +167,22 @@ echo "[Bash Runtime] Execution completed successfully!"
     child.stdout.on('data', (data: any) => { out += data.toString(); });
     child.stderr.on('data', (data: any) => { out += data.toString(); });
     
+    const pollInterval = setInterval(() => {
+      if (fs.existsSync(rawCfgOut)) {
+        clearInterval(pollInterval);
+        log('POST /api/deploy-pipeline', 'Detected raw config. Applying overrides...');
+        try {
+          const rawContent = fs.readFileSync(rawCfgOut, 'utf8');
+          const updatedContent = applyOverridesToGrubCfg(rawContent, toSaveEntries);
+          fs.writeFileSync(tmpPatched, updatedContent);
+        } catch (err: any) {
+          logError('POST /api/deploy-pipeline', 'Failed to patch config:', err.message);
+        }
+      }
+    }, 500);
+
     child.on('close', (code: number) => {
+      clearInterval(pollInterval);
       [tmpConfig, tmpEntries, tmpMeta, scriptPath, rawCfgOut, tmpPatched].forEach(p => {
         try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch {}
       });
@@ -127,24 +198,11 @@ echo "[Bash Runtime] Execution completed successfully!"
     });
     
     child.on('error', (err: any) => {
+      clearInterval(pollInterval);
       [tmpConfig, tmpEntries, tmpMeta, scriptPath, rawCfgOut, tmpPatched].forEach(p => {
         try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch {}
       });
       reject(new Error(`Spawn error: ${err.message}\n${out}`));
     });
-
-    const pollInterval = setInterval(() => {
-      if (fs.existsSync(rawCfgOut)) {
-        clearInterval(pollInterval);
-        log('POST /api/deploy-pipeline', 'Detected raw config. Applying overrides...');
-        try {
-          const rawContent = fs.readFileSync(rawCfgOut, 'utf8');
-          const updatedContent = applyOverridesToGrubCfg(rawContent, toSaveEntries);
-          fs.writeFileSync(tmpPatched, updatedContent);
-        } catch (err: any) {
-          logError('POST /api/deploy-pipeline', 'Failed to patch config:', err.message);
-        }
-      }
-    }, 500);
   });
 }

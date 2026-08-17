@@ -21,7 +21,7 @@ gtk-update-icon-cache -f -t /usr/share/icons/hicolor/ || true
 response="N"
 if [ -t 0 ]; then
     read -p "Do you want to delete all cached or created files made by GrubEditor? (y/N): " -r response
-elif [ -c /dev/tty ]; then
+elif (exec < /dev/tty) 2>/dev/null; then
     read -p "Do you want to delete all cached or created files made by GrubEditor? (y/N): " -r response < /dev/tty
 else
     echo "Non-interactive environment detected, keeping cached files."
